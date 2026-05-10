@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- User Profiles ---
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) 
+        && incoming().diff(existing()).affectedKeys().hasOnly(['fullName']);
+    }
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid 
+        && data.fullName is string && data.fullName.size() <= 100
+        && data.email is string && data.email.size() <= 100;
+    }
+
+    // --- Destinations (Publicly readable, Admin writeable) ---
+    match /destinations/{destId} {
+      allow read: if true;
+      allow write: if false; // Only via backend/admin console
+    }
+
+    // --- Reservations ---
+    match /reservations/{resId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidReservation(incoming());
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidReservation(incoming())
+        && incoming().diff(resource.data).affectedKeys().hasOnly(['status']);
+      // Allow delete if owner OR if missing userId (to clean up old demo data)
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || !('userId' in resource.data));
+    }
+
+    function isValidReservation(data) {
+      return data.userId == request.auth.uid
+        && data.origin is string && data.origin.size() <= 100
+        && data.destinationId is string && data.destinationId.size() <= 100
+        && data.destinationName is string && data.destinationName.size() <= 100
+        && (data.departureDate is string || data.departureDate == null)
+        && (data.status == 'pending' || data.status == 'confirmed' || data.status == 'cancelled');
+    }
+
+    // --- Chats ---
+    match /payments/{paymentId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /users/{userId}/chats/{msgId} {
+      allow list: if isSignedIn() && request.auth.uid == userId;
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidChatMessage(incoming());
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidChatMessage(data) {
+      return data.userId == request.auth.uid
+        && (data.role == 'user' || data.role == 'model')
+        && data.content is string && data.content.size() <= 5000
+        && data.createdAt != null;
+    }
+  }
+}
