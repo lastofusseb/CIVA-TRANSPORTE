@@ -15,10 +15,13 @@ import Destinations from './components/Destinations';
 import Reservations from './components/Reservations';
 import ThesisMetrics from './components/ThesisMetrics';
 import Payments from './components/Payments';
+import TerminalMap from './components/TerminalMap';
 import QRModal from './components/QRModal';
 import { UserProfile, ExtractionResult, Reservation } from './types';
 import { Loader2 } from 'lucide-react';
 import Profile from './components/Profile';
+import LibroReclamaciones from './components/LibroReclamaciones';
+import { useTheme } from './context/ThemeContext';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -28,6 +31,7 @@ export default function App() {
   const [extraction, setExtraction] = useState<ExtractionResult>({});
   const [lastReactedDest, setLastReactedDest] = useState<string | null>(null);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+  const { theme, toggleTheme } = useTheme();
 
   const handleDestinationSelect = (destination: string) => {
     setExtraction({ ...extraction, destination });
@@ -107,6 +111,7 @@ export default function App() {
         />
       )}
       {currentTab === 'destinations' && <Destinations onSelect={handleDestinationSelect} />}
+      {currentTab === 'terminals' && <TerminalMap />}
       {currentTab === 'reservations' && <Reservations profile={profile} onViewQR={(res) => setSelectedReservation(res)} />}
       {currentTab === 'metrics' && <ThesisMetrics />}
       {currentTab === 'payments' && (
@@ -118,6 +123,7 @@ export default function App() {
         />
       )}
       {currentTab === 'profile' && <Profile profile={profile} />}
+      {currentTab === 'reclamaciones' && <LibroReclamaciones />}
       
       {selectedReservation && <QRModal reservation={selectedReservation} onClose={() => setSelectedReservation(null)} />}
     </Layout>

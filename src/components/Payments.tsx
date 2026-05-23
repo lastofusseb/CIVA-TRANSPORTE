@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   CreditCard, 
@@ -10,12 +10,15 @@ import {
   Plus,
   ShieldCheck,
   ChevronLeft,
-  QrCode
+  QrCode,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ExtractionResult, UserProfile } from '../types';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
+
+import { useTheme } from '../context/ThemeContext';
 
 interface PaymentsProps {
   extraction: ExtractionResult;
@@ -35,6 +38,7 @@ const PAYMENT_METHODS = [
 ];
 
 export default function Payments({ extraction, profile, onPay, onGotoProfile }: PaymentsProps) {
+  const { theme } = useTheme();
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<'methods' | 'details' | 'success'>('methods');
@@ -104,11 +108,13 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
         amount: amount,
         destination: destination,
         paymentMethod: selectedMethod.id,
+        passengers: extraction.passengers || 1,
+        passengerNames: extraction.passengerNames || [],
+        passengerDnis: extraction.passengerDnis || [],
         createdAt: serverTimestamp()
       });
 
-      // Update reservations (simulated)
-      // Actually the user might have multiple reservations, we could just create a new one confirmed
+      // Update reservations
       await addDoc(collection(db, 'reservations'), {
         userId: profile.uid,
         origin: extraction.origin || 'Lima',
@@ -118,6 +124,9 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
         status: 'confirmed',
         serviceType: extraction.service || 'Excluciva',
         price: amount,
+        passengers: extraction.passengers || 1,
+        passengerNames: extraction.passengerNames || [],
+        passengerDnis: extraction.passengerDnis || [],
         createdAt: serverTimestamp()
       });
 
@@ -142,89 +151,100 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-10 bg-[#f8f7ff] pb-24">
-      <div className="max-w-6xl mx-auto space-y-12">
+    <div className={`flex-1 overflow-y-auto p-10 pb-24 relative font-sans transition-colors duration-700 ${theme === 'dark' ? 'bg-[#08040d]' : 'bg-[#1a0b2e]'}`}>
+      <div className="absolute inset-0 bg-gradient-to-br from-civa-purple/10 via-transparent to-civa-pink/10 pointer-events-none" />
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-rose-50/20 rounded-full blur-[120px] -mr-48 -mt-48 pointer-events-none" />
+      
+      <div className="max-w-6xl mx-auto space-y-16 relative z-10">
         
         <AnimatePresence mode="wait">
           {step === 'methods' && (
             <motion.div
               key="methods"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-12"
+              exit={{ opacity: 0, y: -30 }}
+              className="space-y-16"
             >
-              <header className="text-center">
-                <h2 className="text-4xl font-display uppercase tracking-tight text-civa-purple">
-                  Pasarela de <span className="text-civa-pink">Pagos Segura</span>
+              <header className="text-center space-y-4">
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="inline-block px-6 py-2 bg-civa-pink/10 border border-civa-pink/20 rounded-full mb-4"
+                >
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-civa-pink">Secure Gateway v4.0</p>
+                </motion.div>
+                <h2 className={`text-5xl font-display uppercase tracking-tight leading-tight text-white`}>
+                  Matriz de <span className="text-civa-pink">Transacción</span>
                 </h2>
-                <p className="text-slate-500 font-medium italic mt-2">
-                  Selecciona tu método de pago preferido para completar tu viaje a {destination}.
+                <p className={`font-medium italic text-lg max-w-2xl mx-auto leading-relaxed text-white/40`}>
+                  Active su Protocolo de Pago para el transporte interestatal hacia <span className="text-white">{destination}</span>.
                 </p>
               </header>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                 {PAYMENT_METHODS.map((method) => (
                   <motion.button
-                    whileHover={{ y: -5, scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={{ y: -10, scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                     key={method.id}
                     onClick={() => {
                       setSelectedMethod(method);
                       setStep('details');
                     }}
-                    className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:border-civa-purple/20 transition-all flex flex-col items-center justify-center gap-4 group"
+                    className="backdrop-blur-3xl p-10 rounded-[4rem] border shadow-2xl transition-all flex flex-col items-center justify-center gap-6 group ring-1 bg-white/5 border-white/5 ring-white/5 shadow-black/40"
                   >
-                    <div className="h-16 flex items-center justify-center">
-                      <img src={method.logo} alt={method.name} className="max-h-full max-w-full object-contain grayscale group-hover:grayscale-0 transition-all duration-500" />
+                    <div className="h-20 flex items-center justify-center relative">
+                      <div className="absolute inset-0 bg-white/10 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
+                      <img src={method.logo} alt={method.name} className={`max-h-full max-w-full object-contain grayscale opacity-40 group-hover:opacity-100 group-hover:grayscale-0 transition-all duration-700 relative z-10 invert brightness-0 hover:invert-0 hover:brightness-100`} />
                     </div>
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none group-hover:text-civa-purple">
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] leading-none group-hover:text-civa-pink transition-colors text-white/30">
                         {method.name}
                     </span>
                   </motion.button>
                 ))}
               </div>
 
-              <div className="space-y-6 pt-10 border-t border-slate-200">
-                <div className="flex items-center gap-3">
-                  <History className="w-5 h-5 text-civa-pink" />
-                  <h3 className="font-display text-sm tracking-widest uppercase text-slate-400">Historial de Transacciones</h3>
+              <div className={`space-y-10 pt-16 border-t border-white/5`}>
+                <div className="flex items-center gap-4">
+                  <div className="w-1.5 h-8 bg-gradient-to-b from-civa-pink to-civa-purple rounded-full shadow-[0_0_15px_rgba(216,27,96,0.3)]" />
+                  <h3 className={`font-display text-xl tracking-tight uppercase italic text-white/40`}>Log de <span className="text-white">Operaciones</span></h3>
                 </div>
 
                 {loading ? (
-                  <div className="py-10 flex justify-center">
-                    <Loader2 className="w-8 h-8 text-civa-purple animate-spin" />
+                  <div className="py-20 flex justify-center">
+                    <Loader2 className="w-10 h-10 text-civa-pink animate-spin" />
                   </div>
                 ) : payments.length === 0 ? (
-                  <div className="py-20 text-center bg-white rounded-[2rem] border-2 border-dashed border-slate-100">
-                    <p className="text-slate-300 font-black uppercase text-[10px] tracking-widest">No hay pagos registrados aún</p>
+                  <div className={`py-24 text-center border-2 border-dashed rounded-[4rem] transition-colors bg-white/5 border-white/5`}>
+                    <p className={`font-black uppercase text-[11px] tracking-[0.5em] italic text-white/20`}>Ninguna transacción detectada en frecuencia</p>
                   </div>
                 ) : (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <AnimatePresence mode="popLayout">
                       {payments.map((p) => (
                         <motion.div
                           layout
                           key={p.id}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          className="bg-white p-6 rounded-[2rem] border border-slate-100 flex items-center justify-between group hover:shadow-xl transition-all"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          className="backdrop-blur-2xl p-8 rounded-[3rem] border flex items-center justify-between group hover:shadow-[0_20px_50px_-10px_rgba(0,0,0,0.2)] transition-all ring-1 bg-white/5 border-white/5 ring-white/5 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)]"
                         >
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center">
-                              <Smartphone className="w-5 h-5 text-civa-purple" />
+                          <div className="flex items-center gap-6">
+                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner group-hover:shadow-[0_0_15px_rgba(216,27,96,0.2)] transition-shadow bg-[#1a0b3e]">
+                              <Smartphone className="w-6 h-6 text-civa-pink" />
                             </div>
                             <div>
-                              <p className="font-display text-lg text-slate-800 leading-none mb-1">S/ {p.amount.toFixed(2)}</p>
-                              <p className="text-[10px] font-black uppercase text-slate-400 tracking-tighter line-clamp-1">{p.destination}</p>
+                              <p className="font-display text-2xl leading-none mb-2 italic text-white">S/ {p.amount.toFixed(2)}</p>
+                              <p className="text-[10px] font-black uppercase tracking-[0.2em] line-clamp-1 text-white/30 text-white/40">{p.destination}</p>
                             </div>
                           </div>
                           <button 
                             onClick={(e) => handleDeleteHistory(p.id, e)}
-                            className="p-3 text-slate-200 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                            className="p-4 rounded-2xl transition-all opacity-0 group-hover:opacity-100 text-white/10 hover:text-red-400 hover:bg-red-500/10"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-5 h-5" />
                           </button>
                         </motion.div>
                       ))}
@@ -238,122 +258,166 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
           {step === 'details' && (
             <motion.div
               key="details"
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="max-w-md mx-auto"
+              exit={{ opacity: 0, x: -50 }}
+              className="max-w-2xl mx-auto"
             >
-              <div className="bg-white rounded-[3.5rem] p-10 shadow-2xl border border-slate-50 relative overflow-hidden">
+              <div className="bg-[#1a0b2e]/60 backdrop-blur-3xl rounded-[4rem] p-12 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.8)] border border-white/10 relative overflow-hidden ring-1 ring-white/10">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-civa-pink/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+                
                 <button 
                   onClick={() => setStep('methods')}
-                  className="absolute top-8 left-8 text-slate-400 hover:text-civa-purple transition-colors p-2 bg-slate-50 rounded-xl"
+                  className="absolute top-10 left-10 text-white/30 hover:text-white transition-all p-3 bg-white/5 rounded-2xl border border-white/10 hover:bg-white/10"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft className="w-6 h-6" />
                 </button>
 
-                <div className="space-y-10">
-                  <div className="text-center">
-                    <div className="inline-flex p-5 rounded-[2rem] bg-slate-50 mb-6 shadow-inner">
-                      <img src={selectedMethod?.logo} className="h-10 object-contain" />
-                    </div>
-                    <h3 className="text-2xl font-display uppercase text-slate-800 tracking-tight">Finalizar Compra</h3>
-                    <p className="text-slate-400 text-sm mt-1 italic">Ruta a {destination}</p>
+                <div className="space-y-12">
+                  <div className="text-center pt-8">
+                    <motion.div 
+                      layoutId={`logo-${selectedMethod?.id}`}
+                      className="inline-flex p-8 rounded-[3rem] bg-white/5 mb-8 shadow-inner border border-white/5 relative group"
+                    >
+                      <div className="absolute inset-0 bg-white/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <img src={selectedMethod?.logo} className="h-14 object-contain brightness-0 invert group-hover:brightness-100 group-hover:invert-0 transition-all relative z-10" />
+                    </motion.div>
+                    <h3 className="text-4xl font-display uppercase text-white tracking-tight leading-none">Confirmación de <span className="text-civa-pink">Pago</span></h3>
+                    <p className="text-white/30 text-lg mt-3 italic">Ruta Vectorizada: <span className="text-white/60">{destination}</span></p>
                   </div>
 
-                  <div className="bg-[#f8f7ff] rounded-[2.5rem] p-8 space-y-4 border border-slate-100">
+                  <div className="bg-black/20 backdrop-blur-2xl rounded-[3rem] p-10 space-y-6 border border-white/5 shadow-inner">
                     <div className="flex justify-between items-center text-sm font-medium">
-                      <span className="text-slate-400 uppercase text-[10px] font-black tracking-widest">Base pasaje</span>
-                      <span className="text-slate-800">S/ {(amount * 0.82).toFixed(2)}</span>
+                      <span className="text-white/20 uppercase text-[10px] font-black tracking-[0.4em]">Base del Pasaje</span>
+                      <span className="text-white/60 tracking-wider">S/ {(amount * 0.82).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm font-medium">
-                      <span className="text-slate-400 uppercase text-[10px] font-black tracking-widest">IGV (18%)</span>
-                      <span className="text-slate-800">S/ {(amount * 0.18).toFixed(2)}</span>
+                      <span className="text-white/20 uppercase text-[10px] font-black tracking-[0.4em]">Impuesto IGV (18%)</span>
+                      <span className="text-white/60 tracking-wider">S/ {(amount * 0.18).toFixed(2)}</span>
                     </div>
-                    <div className="pt-6 border-t border-slate-200 flex justify-between items-center">
-                      <span className="font-black text-[12px] uppercase tracking-[0.2em] text-civa-purple">Total Neto</span>
-                      <span className="text-4xl font-display text-civa-pink">S/ {amount.toFixed(2)}</span>
+
+                    {/* Passenger Manifest in Summary */}
+                    <div className="py-6 border-t border-white/5 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-white/20 uppercase text-[10px] font-black tracking-[0.4em]">Pasajeros Registrados</span>
+                        <span className="text-white/60 font-mono text-xs">{extraction.passengers || 1}</span>
+                      </div>
+                      {extraction.passengerNames && extraction.passengerNames.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {extraction.passengerNames.map((name, i) => (
+                            <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-xl border border-white/5">
+                              <div className="w-1 h-1 bg-civa-pink rounded-full" />
+                              <div className="flex flex-col">
+                                <span className="text-[10px] text-white/60 font-medium capitalize leading-none mb-0.5">{name}</span>
+                                {extraction.passengerDnis?.[i] && (
+                                  <span className="text-[8px] text-white/20 font-mono leading-none tracking-tight">DNI: {extraction.passengerDnis[i]}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-8 border-t border-white/5 flex justify-between items-end">
+                      <div>
+                        <span className="font-black text-[11px] uppercase tracking-[0.5em] text-civa-pink block mb-2">Total Inversión</span>
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                          <span className="text-[9px] font-black uppercase text-white/20 tracking-[0.2em]">Sincronizado</span>
+                        </div>
+                      </div>
+                      <span className="text-6xl font-display text-white italic">S/ {amount.toFixed(2)}</span>
                     </div>
                   </div>
 
                   {selectedMethod?.id === 'yape' ? (
-                    <div className="text-center space-y-6">
-                      <div className="p-6 bg-white border-2 border-dashed border-slate-200 rounded-[2.5rem] inline-block shadow-sm">
-                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=CIVA-PAY-${amount}-${profile?.uid}`} className="w-48 h-48" />
-                      </div>
-                      <div className="flex items-center justify-center gap-2 text-civa-purple font-black text-[10px] uppercase tracking-widest">
-                        <QrCode className="w-4 h-4" />
-                        Escanea y Yapea
+                    <div className="text-center space-y-8">
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="p-10 bg-white/90 rounded-[4rem] inline-block shadow-[0_0_60px_rgba(255,255,255,0.1)] border-8 border-white/10"
+                      >
+                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=CIVA-PAY-${amount}-${profile?.uid}`} className="w-56 h-56" />
+                      </motion.div>
+                      <div className="flex items-center justify-center gap-4 text-civa-pink font-black text-[12px] uppercase tracking-[0.4em] animate-pulse">
+                        <QrCode className="w-5 h-5" />
+                        Capture Código QR
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       <div className="relative group">
-                        <CreditCard className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-civa-purple transition-colors" />
+                        <CreditCard className="absolute left-7 top-1/2 -translate-y-1/2 w-6 h-6 text-white/20 group-focus-within:text-civa-pink transition-colors" />
                         <input 
                           type="text" 
                           value={cardNumber}
                           onChange={handleCardNumberChange}
                           placeholder="0000-0000-0000-0000" 
-                          className="w-full pl-14 pr-6 py-5 bg-slate-50 border border-slate-100 rounded-2xl text-[12px] font-bold font-mono tracking-widest focus:ring-2 focus:ring-civa-purple/20 transition-all outline-none" 
+                          className="w-full pl-16 pr-8 py-7 bg-white/5 border border-white/10 rounded-[2rem] text-[15px] font-bold font-mono tracking-[0.2em] text-white focus:bg-white/10 focus:border-civa-pink/40 transition-all outline-none shadow-inner" 
                         />
                         {cardNumber.length > 0 && (
-                          <div className="absolute right-5 top-1/2 -translate-y-1/2">
-                            <img 
+                          <div className="absolute right-7 top-1/2 -translate-y-1/2">
+                            <motion.img 
+                              initial={{ scale: 0.5, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
                               src={cardNumber.startsWith('4') ? 'https://cdn4.iconfinder.com/data/icons/payment-method-1/64/visa-512.png' : 'https://cdn4.iconfinder.com/data/icons/logos-and-brands/512/204_Mastercard_logo-512.png'} 
-                              className="h-6 object-contain" 
+                              className="h-8 object-contain" 
                               alt="card type"
                             />
                           </div>
                         )}
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-2 gap-6">
                         <div className="relative">
-                          <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                          <Calendar className="absolute left-7 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
                           <input 
                             type="text" 
                             value={expiry}
                             onChange={handleExpiryChange}
                             placeholder="MM/YY" 
-                            className="w-full pl-12 pr-4 py-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-bold uppercase tracking-widest outline-none" 
+                            className="w-full pl-16 pr-6 py-7 bg-white/5 border border-white/10 rounded-[2rem] text-[13px] font-bold uppercase tracking-[0.3em] text-white outline-none focus:bg-white/10 transition-all" 
                           />
                         </div>
                         <div className="relative">
-                          <ShieldCheck className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                          <ShieldCheck className="absolute left-7 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
                           <input 
                             type="text" 
                             value={cvv}
                             onChange={handleCvvChange}
                             placeholder="CVV" 
-                            className="w-full pl-12 pr-4 py-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-bold uppercase tracking-widest outline-none" 
+                            className="w-full pl-16 pr-6 py-7 bg-white/5 border border-white/10 rounded-[2rem] text-[13px] font-bold uppercase tracking-[0.3em] text-white outline-none focus:bg-white/10 transition-all" 
                           />
                         </div>
                       </div>
                     </div>
                   )}
 
-                  <button
-                    onClick={handleFinalPay}
-                    disabled={isProcessing || (selectedMethod?.id !== 'yape' && (cardNumber.length < 19 || expiry.length < 5 || cvv.length < 3))}
-                    className="w-full py-6 bg-civa-purple text-white font-black text-xs uppercase tracking-[0.4em] rounded-[1.5rem] shadow-2xl hover:shadow-civa-purple/40 hover:-translate-y-1 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale relative overflow-hidden group"
-                  >
-                    {isProcessing ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <span>Procesar Pago</span>
-                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
-                    {(selectedMethod?.id !== 'yape' && (cardNumber.length < 19 || expiry.length < 5 || cvv.length < 3)) && !isProcessing && (
-                      <div className="absolute inset-0 bg-black/5 flex items-center justify-center backdrop-blur-[2px]">
-                         <span className="text-[8px] font-black tracking-widest text-white drop-shadow-md">Completa los datos</span>
-                      </div>
-                    )}
-                  </button>
+                  <div className="pt-6">
+                    <button
+                      onClick={handleFinalPay}
+                      disabled={isProcessing || (selectedMethod?.id !== 'yape' && (cardNumber.length < 19 || expiry.length < 5 || cvv.length < 3))}
+                      className="w-full py-8 bg-white text-civa-purple font-black text-[12px] uppercase tracking-[0.5em] rounded-[2.5rem] shadow-[0_30px_60px_-10px_rgba(0,0,0,0.5)] hover:bg-civa-pink hover:text-white hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-20 disabled:grayscale relative overflow-hidden group border border-transparent hover:border-white/20"
+                    >
+                      {isProcessing ? (
+                        <Loader2 className="w-8 h-8 animate-spin mx-auto" />
+                      ) : (
+                        <div className="flex items-center justify-center gap-6">
+                          <span>Ejecutar Transacción</span>
+                          <ArrowRight className="w-5 h-5 group-hover:translate-x-3 transition-transform" />
+                        </div>
+                      )}
+                      {(selectedMethod?.id !== 'yape' && (cardNumber.length < 19 || expiry.length < 5 || cvv.length < 3)) && !isProcessing && (
+                        <div className="absolute inset-0 bg-black/10 flex items-center justify-center backdrop-blur-[1px]">
+                           <span className="text-[9px] font-black tracking-[0.3em] text-white drop-shadow-lg opacity-40">Parámetros Incompletos</span>
+                        </div>
+                      )}
+                    </button>
+                  </div>
 
-                  <div className="flex items-center justify-center gap-3 text-[10px] font-black text-emerald-500 uppercase tracking-widest p-4 bg-emerald-50 rounded-2xl">
-                    <ShieldCheck className="w-5 h-5" />
-                    CERTIFICADO PCI DSS
+                  <div className="flex items-center justify-center gap-4 text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em] p-5 bg-emerald-500/5 rounded-3xl border border-emerald-500/10">
+                    <ShieldCheck className="w-6 h-6 shadow-[0_0_15px_rgba(16,185,129,0.3)]" />
+                    Protocolo SSL v3 • Certificado PCI DSS
                   </div>
                 </div>
               </div>
@@ -363,43 +427,43 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
           {step === 'success' && (
             <motion.div
               key="success"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="max-w-md mx-auto text-center space-y-8 bg-white p-16 rounded-[4rem] shadow-2xl border border-slate-50"
+              initial={{ opacity: 0, scale: 0.9, rotate: -2 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              className="max-w-2xl mx-auto text-center space-y-12 bg-[#1a0b2e]/60 backdrop-blur-3xl p-20 rounded-[5rem] shadow-[0_60px_120px_-30px_rgba(0,0,0,0.9)] border border-white/10 ring-1 ring-white/10"
             >
               <div className="relative inline-block">
                 <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: 'spring', damping: 10, stiffness: 200 }}
-                  className="p-10 rounded-full bg-emerald-50 text-emerald-500"
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring', damping: 12, stiffness: 150 }}
+                  className="p-14 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-[0_0_100px_rgba(16,185,129,0.2)]"
                 >
-                  <CheckCircle2 className="w-24 h-24" />
+                  <CheckCircle2 className="w-32 h-32" />
                 </motion.div>
-                <div className="absolute inset-0 bg-emerald-400 blur-3xl opacity-20" />
+                <div className="absolute inset-0 bg-emerald-400 blur-3xl opacity-20 rounded-full animate-pulse" />
               </div>
 
-              <div className="space-y-2">
-                <h2 className="text-4xl font-display uppercase text-slate-800">¡Pago Exitoso!</h2>
-                <p className="text-slate-500 italic">Tu viaje a {destination} ha sido confirmado con éxito.</p>
+              <div className="space-y-6">
+                <h2 className="text-6xl font-display uppercase text-white italic tracking-tighter">¡Viaje Confirmado!</h2>
+                <p className="text-white/40 text-xl font-medium max-w-md mx-auto leading-relaxed">Su enlace operacional con <span className="text-white selection:bg-civa-pink">{destination}</span> ha sido establecido con éxito.</p>
               </div>
 
-              <div className="p-8 bg-[#f8f7ff] rounded-[3rem] border border-slate-100 text-left space-y-5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-black uppercase text-slate-400 tracking-widest">Código Civap</span>
-                  <span className="font-black text-slate-800">CV-{(Math.random()*100000).toFixed(0)}</span>
+              <div className="p-12 bg-black/30 backdrop-blur-3xl rounded-[4rem] border border-white/5 text-left space-y-8 shadow-inner">
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="font-black uppercase text-white/20 tracking-[0.5em]">Identificador CIVAP</span>
+                  <span className="font-black text-white tracking-[0.2em] italic bg-white/5 px-4 py-2 rounded-xl border border-white/5">CV-{(Math.random()*100000).toFixed(0)}</span>
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-black uppercase text-slate-400 tracking-widest">Estado Pasaje</span>
-                  <span className="px-3 py-1 bg-emerald-100 text-emerald-600 rounded-full font-black text-[9px]">CONFIRMADO</span>
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="font-black uppercase text-white/20 tracking-[0.5em]">Estado de Red</span>
+                  <span className="px-6 py-2 bg-emerald-500/20 text-emerald-500 rounded-full font-black tracking-[0.3em] border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.2)]">SINCRO TOTAL</span>
                 </div>
               </div>
 
               <button
                 onClick={onPay}
-                className="w-full py-6 bg-civa-purple text-white font-black text-[11px] uppercase tracking-[0.4em] rounded-[1.5rem] shadow-2xl hover:scale-105 transition-all"
+                className="w-full py-8 bg-white text-civa-purple font-black text-[13px] uppercase tracking-[0.6em] rounded-[2.5rem] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.6)] hover:bg-civa-pink hover:text-white hover:scale-105 transition-all border border-transparent hover:border-white/20"
               >
-                Ver Mis Reservas
+                Acceder a Bóveda
               </button>
             </motion.div>
           )}

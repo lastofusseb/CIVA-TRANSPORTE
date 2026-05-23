@@ -4,8 +4,10 @@ import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc } from 'f
 import { UserProfile, Reservation } from '../types';
 import { Bus, MapPin, Calendar, QrCode, Ticket, Loader2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useTheme } from '../context/ThemeContext';
 
 export default function Reservations({ profile, onViewQR }: { profile: UserProfile | null, onViewQR: (res: Reservation) => void }) {
+  const { theme } = useTheme();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,78 +47,116 @@ export default function Reservations({ profile, onViewQR }: { profile: UserProfi
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-civa-purple animate-spin" />
+      <div className={`h-full flex items-center justify-center transition-colors duration-700 ${theme === 'dark' ? 'bg-[#08040d]' : 'bg-[#1a0b2e]'}`}>
+        <div className="flex flex-col items-center gap-6">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          >
+            <Loader2 className="w-12 h-12 text-civa-pink drop-shadow-[0_0_15px_rgba(216,27,96,0.5)]" />
+          </motion.div>
+          <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/30">Sincronizando Archivos Históricos...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-10 space-y-8 max-w-4xl pb-20">
-      <div>
-        <h2 className="text-4xl font-display uppercase tracking-tight text-civa-purple">Mis <span className="text-civa-pink">Aventuras</span></h2>
-        <p className="text-slate-500 font-medium italic">Historial de pasajes y rutas gestionadas por IA.</p>
+    <div className={`p-12 space-y-16 max-w-6xl pb-32 relative min-h-full font-sans transition-colors duration-700 ${theme === 'dark' ? 'bg-[#08040d]' : 'bg-[#1a0b2e]'}`}>
+      <div className={`absolute inset-0 ${theme === 'dark' ? 'bg-gradient-to-br from-civa-purple/5' : 'bg-gradient-to-br from-civa-purple/20 via-transparent to-civa-pink/10'} to-transparent pointer-events-none`} />
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-rose-50/10 rounded-full blur-[120px] -mr-48 -mt-48 pointer-events-none" />
+      
+      <div className="relative z-10 space-y-6">
+        <motion.div
+          initial={{ x: -20, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          className="flex items-center gap-4"
+        >
+          <div className="w-1.5 h-12 bg-gradient-to-b from-civa-pink to-civa-purple rounded-full shadow-[0_0_20px_rgba(216,27,96,0.4)]" />
+          <h2 className="text-6xl font-display uppercase tracking-tight leading-none text-white">Mis <span className="text-civa-pink italic drop-shadow-[0_0_20px_rgba(216,27,96,0.3)]">Crónicas de Viaje</span></h2>
+        </motion.div>
+        <p className="text-lg font-medium italic mt-2 max-w-2xl leading-relaxed text-white/40">Registro inmutable de trayectorias, itinerarios y conﬁrmaciones gestionadas por el <span className="text-white/60">Sistema Neural CIVA</span>.</p>
       </div>
 
       {reservations.length === 0 ? (
-        <div className="bg-white border-2 border-dashed border-slate-200 rounded-[3rem] p-20 text-center">
-            <Ticket className="w-16 h-16 text-slate-100 mx-auto mb-6" />
-            <h3 className="text-xl font-bold text-slate-300 italic">No tienes reservas aún</h3>
-            <p className="text-slate-400 mt-2">¡Conversa con el Copiloto IA para planificar tu primer viaje!</p>
+        <div className={`border-2 border-dashed rounded-[5rem] p-32 text-center backdrop-blur-3xl relative overflow-hidden group shadow-2xl ring-1 ${
+          theme === 'dark' ? 'bg-white/5 border-white/5 ring-white/5' : 'bg-white/5 border-white/10 ring-white/5 shadow-black/40'
+        }`}>
+            <div className="absolute inset-0 bg-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+            <Ticket className={`w-24 h-24 mx-auto mb-10 group-hover:text-civa-pink/30 group-hover:scale-110 transition-all duration-700 text-white/10`} />
+            <h3 className="text-3xl font-display uppercase tracking-[0.2em] italic mb-6 text-white/20">Archivo Histórico Vacío</h3>
+            <p className="text-base font-medium max-w-md mx-auto italic text-white/30">Proyecte su próxima trayectoria sincronizando sus intenciones con nuestro Copiloto Inteligente.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-8">
           <AnimatePresence mode="popLayout">
             {reservations.map((res, i) => (
               <motion.div
                 key={res.id}
                 layout
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="group bg-white border border-slate-100 rounded-[2rem] p-8 flex flex-wrap md:flex-nowrap gap-8 items-center hover:shadow-2xl hover:border-civa-purple/10 transition-all shadow-sm"
+                initial={{ opacity: 0, y: 50, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.6, delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                className={`group backdrop-blur-3xl border rounded-[4rem] p-12 flex flex-wrap lg:flex-nowrap gap-12 items-center transition-all duration-700 shadow-2xl relative overflow-hidden ring-1 ${
+                  theme === 'dark' ? 'bg-[#1a0b2e]/40 border-white/5 ring-white/5 hover:bg-[#1a0b2e]/60 hover:shadow-[0_50px_100px_-20px_rgba(0,0,0,0.8)] hover:border-civa-pink/40' : 'bg-white/5 border-white/10 ring-white/5 shadow-black/40 hover:bg-white/10'
+                }`}
               >
-                <div className="w-20 h-20 bg-civa-purple/5 rounded-[1.5rem] flex items-center justify-center text-civa-purple shrink-0">
-                  <Bus className="w-10 h-10" />
+                <div className="absolute inset-0 bg-gradient-to-r from-civa-pink/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                
+                <div className={`w-28 h-28 rounded-[2.5rem] flex items-center justify-center group-hover:text-civa-pink group-hover:scale-110 transition-all border shadow-inner ring-1 ${
+                  theme === 'dark' ? 'bg-[#0b0612] text-white/10 border-white/10 ring-white/5' : 'bg-black/20 text-white/10 border-white/10 shadow-inner'
+                }`}>
+                  <Bus className="w-14 h-14 drop-shadow-[0_0_15px_rgba(216,27,96,0.3)]" />
                 </div>
 
-                <div className="flex-1 min-w-[200px]">
-                  <div className="flex items-center gap-2 text-slate-400 mb-2">
-                     <MapPin className="w-3.5 h-3.5" />
-                     <span className="text-[10px] uppercase font-black tracking-widest">Ruta Directa</span>
+                <div className="flex-1 min-w-[280px] relative z-10 space-y-4">
+                  <div className="flex items-center gap-4 text-white/20">
+                     <MapPin className="w-5 h-5 text-civa-pink animate-pulse shadow-[0_0_10px_rgba(216,27,96,0.5)]" />
+                     <span className="text-[10px] uppercase font-black tracking-[0.5em] italic">Vector de Operación</span>
                   </div>
-                  <p className="font-display text-2xl text-slate-800 uppercase leading-none">{(res.origin || 'Lima')} <span className="text-civa-pink">→</span> {(res.destinationName || 'Destino')}</p>
+                  <p className="font-display text-5xl uppercase leading-none group-hover:text-civa-pink transition-colors tracking-tighter italic text-white">{(res.origin || 'Lima')} <span className="text-civa-pink/30 not-italic">→</span> {(res.destinationName || 'Destino')}</p>
                 </div>
 
-                <div className="min-w-[150px]">
-                  <div className="flex items-center gap-2 text-slate-400 mb-2">
-                     <Calendar className="w-3.5 h-3.5" />
-                     <span className="text-[10px] uppercase font-black tracking-widest">Fecha Viaje</span>
+                <div className="min-w-[200px] relative z-10 space-y-4">
+                  <div className="flex items-center gap-4 text-white/20">
+                     <Calendar className="w-5 h-5 text-white/20" />
+                     <span className="text-[10px] uppercase font-black tracking-[0.5em] italic">Cronograma Temporal</span>
                   </div>
-                  <p className="font-bold text-slate-700">{res.departureDate ? new Date(res.departureDate).toLocaleDateString() : 'Pendiente'}</p>
+                  <p className="text-2xl font-bold tracking-tight italic font-display leading-none text-white/60">{res.departureDate ? new Date(res.departureDate).toLocaleDateString('es-PE', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Próximo Ciclo'}</p>
                 </div>
 
-                <div className="flex items-center gap-4">
-                   <div className={`px-4 py-2 rounded-2xl text-[10px] uppercase font-black tracking-widest ${
-                     res.status === 'confirmed' ? 'bg-green-50 text-green-600 border border-green-100' : 
-                     res.status === 'pending' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-slate-50 text-slate-500 border border-slate-100'
+                <div className="flex items-center gap-8 relative z-10">
+                   <div className={`px-10 py-4 rounded-[1.8rem] text-[10px] uppercase font-black tracking-[0.4em] italic shadow-inner border transition-all duration-700 ${
+                     res.status === 'confirmed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.1)] group-hover:bg-emerald-500/20 group-hover:shadow-[0_0_50px_rgba(16,185,129,0.2)]' : 
+                     res.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-white/5 text-white/30 border-white/5'
                    }`}>
-                     {res.status === 'confirmed' ? 'Confirmado' : res.status === 'pending' ? 'Pendiente' : res.status}
+                     {res.status === 'confirmed' ? 'VERIFICADO' : res.status === 'pending' ? 'EN PROCESO' : res.status}
                    </div>
                    
-                   <button 
-                    onClick={() => onViewQR(res)}
-                    className="p-4 bg-civa-purple text-white rounded-2xl shadow-lg shadow-civa-purple/20 hover:bg-civa-dark transition-all"
-                  >
-                    <QrCode className="w-5 h-5" />
-                  </button>
-
-                  <button 
-                    onClick={() => handleDelete(res.id!)}
-                    className="p-4 bg-red-50 text-red-500 rounded-2xl transition-all hover:bg-red-600 hover:text-white border border-red-100"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+                    <div className="flex gap-4">
+                       <motion.button 
+                         whileHover={{ scale: 1.1, y: -5 }}
+                         whileTap={{ scale: 0.9 }}
+                         onClick={() => onViewQR(res)}
+                         className={`p-6 rounded-3xl shadow-xl transition-all border border-transparent ${
+                           theme === 'dark' ? 'bg-white text-civa-purple hover:bg-civa-pink hover:text-white hover:border-white/20 shadow-[0_20px_40px_rgba(0,0,0,0.4)]' : 'bg-white text-civa-purple hover:bg-civa-pink hover:text-white shadow-lg shadow-black/40'
+                         }`}
+                       >
+                         <QrCode className="w-7 h-7" />
+                       </motion.button>
+  
+                       <motion.button 
+                         whileHover={{ scale: 1.1, y: -5 }}
+                         whileTap={{ scale: 0.9 }}
+                         onClick={() => handleDelete(res.id!)}
+                         className={`p-6 rounded-3xl transition-all border shadow-inner group-hover:opacity-100 ${
+                           theme === 'dark' ? 'bg-white/5 text-white/10 border-white/5 hover:bg-rose-500/80 hover:text-white hover:border-white/20' : 'bg-white/5 text-white/20 border-white/5 hover:bg-rose-500 hover:text-white hover:border-transparent'
+                         }`}
+                       >
+                         <Trash2 className="w-7 h-7" />
+                       </motion.button>
+                    </div>
                 </div>
               </motion.div>
             ))}

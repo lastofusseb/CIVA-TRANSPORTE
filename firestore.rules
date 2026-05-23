@@ -67,6 +67,35 @@ service cloud.firestore {
         && (data.status == 'pending' || data.status == 'confirmed' || data.status == 'cancelled');
     }
 
+    // --- Complaints (Libro de Reclamaciones) ---
+    match /complaints/{complaintId} {
+      allow create: if isValidId(complaintId) && isValidComplaint(incoming());
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    function isValidComplaint(data) {
+      return data.hojaNumber is string && data.hojaNumber.size() <= 64
+        && data.date is string
+        && data.consumer is map
+        && data.consumer.fullName is string && data.consumer.fullName.size() <= 256
+        && data.consumer.address is string && data.consumer.address.size() <= 512
+        && data.consumer.docType is string
+        && data.consumer.docNumber is string && data.consumer.docNumber.size() <= 32
+        && data.consumer.phone is string && data.consumer.phone.size() <= 32
+        && data.consumer.email is string && data.consumer.email.size() <= 256
+        && data.item is map
+        && data.item.type in ['Servicio', 'Producto']
+        && data.item.amount is number
+        && data.detail is map
+        && data.detail.type in ['Reclamo', 'Queja']
+        && data.detail.summary is string && data.detail.summary.size() <= 5000
+        && data.detail.request is string && data.detail.request.size() <= 5000
+        && (data.userId == null || data.userId == request.auth.uid)
+        && data.createdAt == request.time;
+    }
+
     // --- Chats ---
     match /payments/{paymentId} {
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;

@@ -2,6 +2,7 @@ export interface UserProfile {
   uid: string;
   fullName: string;
   email: string;
+  photoURL?: string;
   createdAt: string;
 }
 
@@ -39,4 +40,7 @@ export interface ExtractionResult {
   priceEst?: number;
   origin?: string;
   departureDate?: string;
+  passengers?: number;
+  passengerNames?: string[];
+  passengerDnis?: string[];
 }

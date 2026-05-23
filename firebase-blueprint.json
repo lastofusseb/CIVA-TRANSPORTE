@@ -51,9 +51,76 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "role", "content", "createdAt"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Complaint registered in the digital complaints book",
+      "type": "object",
+      "properties": {
+        "hojaNumber": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "consumer": {
+          "type": "object",
+          "properties": {
+            "fullName": { "type": "string" },
+            "address": { "type": "string" },
+            "docType": { "type": "string" },
+            "docNumber": { "type": "string" },
+            "phone": { "type": "string" },
+            "email": { "type": "string" },
+            "relationship": { "type": "string" }
+          },
+          "required": ["fullName", "address", "docType", "docNumber", "phone", "email"]
+        },
+        "item": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["Servicio", "Producto"] },
+            "amount": { "type": "number" }
+          },
+          "required": ["type", "amount"]
+        },
+        "detail": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["Reclamo", "Queja"] },
+            "summary": { "type": "string" },
+            "request": { "type": "string" }
+          },
+          "required": ["type", "summary", "request"]
+        },
+        "userId": { "type": "string" }
+      },
+      "required": ["hojaNumber", "date", "consumer", "item", "detail"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment transaction record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "destination": { "type": "string" },
+        "method": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "destination", "createdAt"]
     }
   },
   "firestore": {
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Payment records"
+    },
+    "/users/{userId}/chats/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Private chat history for the copilot"
+    },
+    "/complaints/{complaintId}": {
+      "schema": "Complaint",
+      "description": "Complaints registered via Libro de Reclamaciones"
+    },
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles"
@@ -65,10 +132,6 @@
     "/reservations/{reservationId}": {
       "schema": "Reservation",
       "description": "User bookings"
-    },
-    "/users/{userId}/chats/{messageId}": {
-      "schema": "ChatMessage",
-      "description": "Private chat history for the copilot"
     }
   }
 }
