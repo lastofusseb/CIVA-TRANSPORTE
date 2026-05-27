@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Timer, Zap, CheckCircle, BarChart3, TrendingDown, TrendingUp, Sparkles, BrainCircuit, Users, Clock, History } from 'lucide-react';
+import { Timer, Zap, CheckCircle, BarChart3, TrendingDown, TrendingUp, Sparkles, BrainCircuit, Users, Clock, History, Activity } from 'lucide-react';
 import { 
   BarChart, 
   Bar, 
@@ -16,6 +16,13 @@ import {
 } from 'recharts';
 
 import { useTheme } from '../context/ThemeContext';
+import {
+  calculateRouteScore,
+  predictCongestion,
+  dashboardMetrics,
+  optimalRoute,
+  getTrafficStatus
+} from "../lib/intelligentEngine";
 
 const dashboardData = [
   { name: 'Lun', reservas: 400, precision: 92, latencia: 1.2 },
@@ -31,6 +38,23 @@ const COLORS = ['#4e1e8b', '#d81b60', '#ffd600', '#00e676'];
 
 export default function ThesisMetrics() {
   const { theme } = useTheme();
+
+  const routeScore = calculateRouteScore({
+    traffic: 32,
+    time: 20,
+    distance: 18,
+    cost: 10,
+    risk: 5
+  });
+
+  const congestionPrediction = predictCongestion({
+    currentTraffic: 55,
+    hour: 18,
+    weather: "rain"
+  });
+
+  const congestionStatus = getTrafficStatus(congestionPrediction);
+
   return (
     <div className={`p-10 space-y-12 max-w-7xl mx-auto pb-20 relative overflow-hidden min-h-full font-sans transition-colors duration-700 ${theme === 'dark' ? 'bg-[#08040d]' : 'bg-[#1a0b2e]'}`}>
       {/* Background Glows */}
@@ -64,6 +88,96 @@ export default function ThesisMetrics() {
         <StatCard icon={Zap} label="Ahorro Operativo" value="42.5%" color="bg-civa-pink" trend="+8.1%" theme={theme} />
       </div>
 
+      {/* Intelligent Engine Metrics */}
+      <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* NUEVA CARD — ROUTE SCORE */}
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="bg-[#14051f] border border-fuchsia-500/20 rounded-[2rem] p-8 shadow-[0_0_60px_rgba(217,70,239,0.08)] flex flex-col justify-between"
+        >
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-black">
+                Intelligent Route Score
+              </p>
+              <h2 className="text-5xl font-black text-fuchsia-500 mt-4 leading-none">
+                {routeScore}%
+              </h2>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-fuchsia-500/10 flex items-center justify-center shrink-0">
+              <Sparkles className="text-fuchsia-400 w-8 h-8" />
+            </div>
+          </div>
+          <p className="text-zinc-400 text-sm leading-relaxed">
+            Evaluación dinámica basada en IA híbrida,
+            optimización computacional y análisis multicriterio.
+          </p>
+        </motion.div>
+
+        {/* NUEVA CARD — CONGESTION PREDICTION */}
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="bg-[#14051f] border border-emerald-500/20 rounded-[2rem] p-8 shadow-[0_0_60px_rgba(16,185,129,0.08)] flex flex-col justify-between"
+        >
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-black">
+                Congestion Prediction
+              </p>
+              <h2 className="text-5xl font-black text-emerald-400 mt-4 leading-none">
+                {congestionPrediction}%
+              </h2>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <Activity className="text-emerald-400 w-8 h-8" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-zinc-400 text-sm">
+              Estado predictivo del tráfico urbano.
+            </p>
+            <span className="px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-black tracking-[0.2em] ml-2">
+              {congestionStatus}
+            </span>
+          </div>
+        </motion.div>
+
+        {/* NUEVA CARD — OPTIMAL ROUTE */}
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="bg-[#14051f] border border-cyan-500/20 rounded-[2rem] p-8 shadow-[0_0_60px_rgba(6,182,212,0.08)] flex flex-col justify-between"
+        >
+          <div className="mb-6">
+            <p className="text-[10px] uppercase tracking-[0.35em] text-zinc-500 font-black">
+              Optimal Route Engine
+            </p>
+            <h2 className="text-3xl font-black text-cyan-400 mt-4 leading-none">
+              {optimalRoute.name}
+            </h2>
+          </div>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl">
+              <span className="text-zinc-400 text-sm">Optimization Score</span>
+              <span className="text-white font-black">
+                {optimalRoute.score?.toFixed(1)}%
+              </span>
+            </div>
+            <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl">
+              <span className="text-zinc-400 text-sm">Traffic Factor</span>
+              <span className="text-white font-black">
+                {optimalRoute.traffic}%
+              </span>
+            </div>
+            <div className="flex justify-between items-center bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+              <span className="text-emerald-500 text-sm font-medium">ETA Stability</span>
+              <span className="text-emerald-400 font-black text-xs tracking-wider">
+                OPTIMIZED
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
       <div className="relative z-10 grid lg:grid-cols-3 gap-8">
         {/* Main Chart Column */}
         <div className="lg:col-span-2 space-y-8">
@@ -91,7 +205,7 @@ export default function ThesisMetrics() {
               </div>
             </div>
             <div className="h-[400px] relative z-10">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                 <BarChart data={dashboardData}>
                   <defs>
                     <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
@@ -165,7 +279,7 @@ export default function ThesisMetrics() {
              >
                 <h5 className={`text-[10px] font-black uppercase tracking-[0.4em] mb-8 text-white/30`}>Latencia de Respuesta</h5>
                 <div className="h-[120px] mb-6">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                     <AreaChart data={dashboardData}>
                        <defs>
                         <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
@@ -201,8 +315,8 @@ export default function ThesisMetrics() {
           >
              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-civa-pink via-civa-purple to-civa-accent" />
             <h4 className={`font-display uppercase tracking-[0.4em] text-[10px] mb-10 text-white/30`}>Índice de Certeza</h4>
-            <div className="flex-1">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <div className="flex-1 min-h-[200px] relative">
+              <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                 <AreaChart data={dashboardData}>
                   <defs>
                     <linearGradient id="colorPrec" x1="0" y1="0" x2="0" y2="1">

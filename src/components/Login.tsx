@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import { 
   signInWithPopup, 
@@ -25,6 +25,9 @@ import {
   Sun,
   Moon
 } from 'lucide-react';
+
+const LOGO_URL = "https://www.civa.com.pe/assets/img/logo_civa.png";
+const FLEET_IMAGE = "https://www.civa.com.pe/assets/img/slider/home/slide-web-1.jpg";
 
 export default function Login() {
   const { theme, toggleTheme } = useTheme();
