@@ -16,7 +16,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { ExtractionResult, UserProfile } from '../types';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, deleteDoc, doc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 import { useTheme } from '../context/ThemeContext';
 
@@ -81,6 +81,16 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
   useEffect(() => {
     if (!profile) return;
     const fetchPayments = async () => {
+      if (profile.isLocal) {
+        try {
+          const stored = localStorage.getItem(`civa_payments_${profile.uid}`);
+          setPayments(stored ? JSON.parse(stored) : []);
+        } catch (err) {
+          console.error(err);
+        }
+        setLoading(false);
+        return;
+      }
       try {
         const q = query(
           collection(db, 'payments'),
@@ -90,7 +100,13 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
         const snapshot = await getDocs(q);
         setPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       } catch (error) {
-        console.error(error);
+        console.warn("Firestore payments fetch failed, using local storage backup:", error);
+        try {
+          const stored = localStorage.getItem(`civa_payments_${profile.uid}`);
+          setPayments(stored ? JSON.parse(stored) : []);
+        } catch {
+          setPayments([]);
+        }
       } finally {
         setLoading(false);
       }
@@ -102,8 +118,7 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
     if (!profile) return;
     setIsProcessing(true);
     try {
-      // Save payment to history
-      const payRef = await addDoc(collection(db, 'payments'), {
+      const paymentData = {
         userId: profile.uid,
         amount: amount,
         destination: destination,
@@ -111,24 +126,136 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
         passengers: extraction.passengers || 1,
         passengerNames: extraction.passengerNames || [],
         passengerDnis: extraction.passengerDnis || [],
-        createdAt: serverTimestamp()
-      });
+        createdAt: new Date().toISOString()
+      };
 
-      // Update reservations
-      await addDoc(collection(db, 'reservations'), {
-        userId: profile.uid,
-        origin: extraction.origin || 'Lima',
-        destinationId: destination.toLowerCase(),
-        destinationName: destination,
-        departureDate: extraction.departureDate || new Date().toISOString().split('T')[0],
-        status: 'confirmed',
-        serviceType: extraction.service || 'Excluciva',
-        price: amount,
-        passengers: extraction.passengers || 1,
-        passengerNames: extraction.passengerNames || [],
-        passengerDnis: extraction.passengerDnis || [],
-        createdAt: serverTimestamp()
-      });
+      if (profile.isLocal) {
+        const payId = 'pay_' + Math.random().toString(36).substring(2, 11);
+        try {
+          const stored = localStorage.getItem(`civa_payments_${profile.uid}`);
+          const list = stored ? JSON.parse(stored) : [];
+          list.unshift({ id: payId, ...paymentData });
+          localStorage.setItem(`civa_payments_${profile.uid}`, JSON.stringify(list));
+        } catch (e) {
+          console.error(e);
+        }
+
+        if (extraction.reservationId) {
+          try {
+            const storedRes = localStorage.getItem(`civa_reservations_${profile.uid}`);
+            const listRes = storedRes ? JSON.parse(storedRes) : [];
+            const updated = listRes.map((r: any) => r.id === extraction.reservationId ? { ...r, status: 'confirmed' } : r);
+            localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(updated));
+          } catch (e) {
+            console.error(e);
+          }
+        } else {
+          try {
+            const storedRes = localStorage.getItem(`civa_reservations_${profile.uid}`);
+            const listRes = storedRes ? JSON.parse(storedRes) : [];
+            listRes.unshift({
+              id: 'local_' + Math.random().toString(36).substring(2, 11),
+              userId: profile.uid,
+              origin: extraction.origin || 'Lima',
+              destinationId: destination.toLowerCase(),
+              destinationName: destination,
+              departureDate: extraction.departureDate || new Date().toISOString().split('T')[0],
+              status: 'confirmed',
+              serviceType: extraction.service || 'Excluciva',
+              price: amount,
+              passengers: extraction.passengers || 1,
+              passengerNames: extraction.passengerNames || [],
+              passengerDnis: extraction.passengerDnis || [],
+              createdAt: new Date().toISOString()
+            });
+            localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(listRes));
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      } else {
+        try {
+          const payRef = await addDoc(collection(db, 'payments'), {
+            ...paymentData,
+            createdAt: serverTimestamp()
+          });
+
+          if (extraction.reservationId) {
+            const resRef = doc(db, 'reservations', extraction.reservationId);
+            await updateDoc(resRef, {
+              status: 'confirmed'
+            });
+
+            try {
+              const storedRes = localStorage.getItem(`civa_reservations_${profile.uid}`);
+              const listRes = storedRes ? JSON.parse(storedRes) : [];
+              const updated = listRes.map((r: any) => r.id === extraction.reservationId ? { ...r, status: 'confirmed' } : r);
+              localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(updated));
+            } catch {}
+          } else {
+            await addDoc(collection(db, 'reservations'), {
+              userId: profile.uid,
+              origin: extraction.origin || 'Lima',
+              destinationId: destination.toLowerCase(),
+              destinationName: destination,
+              departureDate: extraction.departureDate || new Date().toISOString().split('T')[0],
+              status: 'confirmed',
+              serviceType: extraction.service || 'Excluciva',
+              price: amount,
+              passengers: extraction.passengers || 1,
+              passengerNames: extraction.passengerNames || [],
+              passengerDnis: extraction.passengerDnis || [],
+              createdAt: serverTimestamp()
+            });
+          }
+
+          try {
+            const stored = localStorage.getItem(`civa_payments_${profile.uid}`);
+            const list = stored ? JSON.parse(stored) : [];
+            list.unshift({ id: payRef.id, ...paymentData });
+            localStorage.setItem(`civa_payments_${profile.uid}`, JSON.stringify(list));
+          } catch {}
+        } catch (error) {
+          console.warn("Firestore payment failed, saving locally:", error);
+          const payId = 'pay_fb_' + Math.random().toString(36).substring(2, 11);
+          try {
+            const stored = localStorage.getItem(`civa_payments_${profile.uid}`);
+            const list = stored ? JSON.parse(stored) : [];
+            list.unshift({ id: payId, ...paymentData });
+            localStorage.setItem(`civa_payments_${profile.uid}`, JSON.stringify(list));
+          } catch {}
+
+          if (extraction.reservationId) {
+            try {
+              const storedRes = localStorage.getItem(`civa_reservations_${profile.uid}`);
+              const listRes = storedRes ? JSON.parse(storedRes) : [];
+              const updated = listRes.map((r: any) => r.id === extraction.reservationId ? { ...r, status: 'confirmed' } : r);
+              localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(updated));
+            } catch {}
+          } else {
+            try {
+              const storedRes = localStorage.getItem(`civa_reservations_${profile.uid}`);
+              const listRes = storedRes ? JSON.parse(storedRes) : [];
+              listRes.unshift({
+                id: 'local_' + Math.random().toString(36).substring(2, 11),
+                userId: profile.uid,
+                origin: extraction.origin || 'Lima',
+                destinationId: destination.toLowerCase(),
+                destinationName: destination,
+                departureDate: extraction.departureDate || new Date().toISOString().split('T')[0],
+                status: 'confirmed',
+                serviceType: extraction.service || 'Excluciva',
+                price: amount,
+                passengers: extraction.passengers || 1,
+                passengerNames: extraction.passengerNames || [],
+                passengerDnis: extraction.passengerDnis || [],
+                createdAt: new Date().toISOString()
+              });
+              localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(listRes));
+            } catch {}
+          }
+        }
+      }
 
       setStep('success');
     } catch (error) {
@@ -142,11 +269,39 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
     e.stopPropagation();
     if (!profile) return;
     if (!window.confirm('¿Deseas eliminar este registro de pago?')) return;
+    if (profile.isLocal) {
+      try {
+        const stored = localStorage.getItem(`civa_payments_${profile.uid}`);
+        const list = stored ? JSON.parse(stored) : [];
+        const filtered = list.filter((p: any) => p.id !== id);
+        localStorage.setItem(`civa_payments_${profile.uid}`, JSON.stringify(filtered));
+        setPayments(filtered);
+      } catch (err) {
+        console.error(err);
+      }
+      return;
+    }
     try {
        await deleteDoc(doc(db, 'payments', id));
        setPayments(prev => prev.filter(p => p.id !== id));
+       try {
+         const stored = localStorage.getItem(`civa_payments_${profile.uid}`);
+         if (stored) {
+           const list = JSON.parse(stored);
+           localStorage.setItem(`civa_payments_${profile.uid}`, JSON.stringify(list.filter((p: any) => p.id !== id)));
+         }
+       } catch {}
     } catch (error) {
-       handleFirestoreError(error, OperationType.DELETE, `payments/${id}`);
+       console.warn("Firestore payment deletion failed, deleting locally:", error);
+       try {
+         const stored = localStorage.getItem(`civa_payments_${profile.uid}`);
+         const list = stored ? JSON.parse(stored) : [];
+         const filtered = list.filter((p: any) => p.id !== id);
+         localStorage.setItem(`civa_payments_${profile.uid}`, JSON.stringify(filtered));
+         setPayments(filtered);
+       } catch {
+         setPayments(prev => prev.filter(p => p.id !== id));
+       }
     }
   };
 
@@ -196,7 +351,7 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
                   >
                     <div className="h-20 flex items-center justify-center relative">
                       <div className="absolute inset-0 bg-white/10 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity rounded-full" />
-                      <img src={method.logo} alt={method.name} className={`max-h-full max-w-full object-contain grayscale opacity-40 group-hover:opacity-100 group-hover:grayscale-0 transition-all duration-700 relative z-10 invert brightness-0 hover:invert-0 hover:brightness-100`} />
+                      <img src={method.logo} alt={method.name} className="max-h-full max-w-full object-contain grayscale opacity-60 group-hover:opacity-100 group-hover:grayscale-0 transition-all duration-300 relative z-10" />
                     </div>
                     <span className="text-[10px] font-black uppercase tracking-[0.4em] leading-none group-hover:text-civa-pink transition-colors text-white/30">
                         {method.name}
@@ -280,7 +435,7 @@ export default function Payments({ extraction, profile, onPay, onGotoProfile }: 
                       className="inline-flex p-8 rounded-[3rem] bg-white/5 mb-8 shadow-inner border border-white/5 relative group"
                     >
                       <div className="absolute inset-0 bg-white/10 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <img src={selectedMethod?.logo} className="h-14 object-contain brightness-0 invert group-hover:brightness-100 group-hover:invert-0 transition-all relative z-10" />
+                      <img src={selectedMethod?.logo} className="h-14 object-contain transition-all relative z-10" />
                     </motion.div>
                     <h3 className="text-4xl font-display uppercase text-white tracking-tight leading-none">Confirmación de <span className="text-civa-pink">Pago</span></h3>
                     <p className="text-white/30 text-lg mt-3 italic">Ruta Vectorizada: <span className="text-white/60">{destination}</span></p>

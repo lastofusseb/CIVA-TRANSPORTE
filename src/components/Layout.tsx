@@ -33,6 +33,7 @@ export default function Layout({ children, currentTab, setCurrentTab, profile }:
   const { theme, toggleTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const isAdmin = profile?.role === 'admin';
   const menuItems = [
     { id: 'copilot', label: 'Copiloto IA', icon: MessageSquare },
     { id: 'destinations', label: 'Explora Perú', icon: MapPin },
@@ -40,7 +41,7 @@ export default function Layout({ children, currentTab, setCurrentTab, profile }:
     { id: 'reservations', label: 'Mis Reservas', icon: History },
     { id: 'profile', label: 'Mi Perfil', icon: UserIcon },
     { id: 'reclamaciones', label: 'Reclamaciones', icon: Book },
-    { id: 'metrics', label: 'Metodología', icon: BarChart3 },
+    ...(isAdmin ? [{ id: 'metrics', label: 'Metodología', icon: BarChart3 }] : []),
     { id: 'payments', label: 'Pagos', icon: CreditCard },
   ];
 
@@ -102,7 +103,15 @@ export default function Layout({ children, currentTab, setCurrentTab, profile }:
             </div>
           </div>
           <button 
-            onClick={() => signOut(auth)}
+            onClick={async () => {
+              localStorage.removeItem('civa_local_profile');
+              try {
+                await signOut(auth);
+              } catch (e) {
+                console.warn(e);
+              }
+              window.location.reload();
+            }}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-white/5 bg-white/5 rounded-xl font-black text-[8px] uppercase tracking-widest text-white/40 hover:text-rose-500 hover:bg-rose-500/10 transition-all"
           >
             <LogOut className="w-4 h-4" />
@@ -171,6 +180,13 @@ export default function Layout({ children, currentTab, setCurrentTab, profile }:
           </div>
           
           <div className="flex items-center gap-3 md:gap-6">
+            {profile?.isLocal && (
+              <div className="hidden lg:flex flex-col text-right">
+                <span className="text-[8px] font-black text-amber-500 uppercase tracking-[0.2em] leading-none mb-1">⚠️ Sincronización Local</span>
+                <span className="text-[7px] text-white/40 leading-none">Activa Firebase Auth (Email/Anónimo)</span>
+              </div>
+            )}
+            
             <div className={`hidden md:flex items-center gap-4 px-8 py-4 rounded-3xl text-[10px] font-black uppercase tracking-[0.3em] border ring-1 shadow-sm ${
               theme === 'dark' ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10 ring-emerald-500/10' : 'bg-emerald-50 text-emerald-600 border-emerald-100 ring-emerald-50'
             }`}>

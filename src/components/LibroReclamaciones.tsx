@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Book, Send, CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { useEffect } from 'react';
+import { UserProfile } from '../types';
 
-export default function LibroReclamaciones() {
+interface LibroReclamacionesProps {
+  profile?: UserProfile;
+}
+
+export default function LibroReclamaciones({ profile }: LibroReclamacionesProps) {
   const { theme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -19,10 +23,22 @@ export default function LibroReclamaciones() {
   const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
 
   useEffect(() => {
-    if (auth.currentUser && activeTab === 'history') {
+    if (!profile) return;
+    
+    if (activeTab === 'history') {
+      if (profile.isLocal) {
+        try {
+          const stored = localStorage.getItem(`civa_complaints_${profile.uid}`);
+          setHistory(stored ? JSON.parse(stored) : []);
+        } catch (err) {
+          console.error("Local complaints fetch error:", err);
+        }
+        return;
+      }
+
       const q = query(
         collection(db, 'complaints'),
-        where('userId', '==', auth.currentUser.uid),
+        where('userId', '==', profile.uid),
         orderBy('createdAt', 'desc')
       );
       
@@ -30,12 +46,18 @@ export default function LibroReclamaciones() {
         const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setHistory(docs);
       }, (error) => {
-        handleFirestoreError(error, OperationType.GET, 'complaints');
+        console.warn("Firestore complaints listen failed, falling back to local storage:", error);
+        try {
+          const stored = localStorage.getItem(`civa_complaints_${profile.uid}`);
+          setHistory(stored ? JSON.parse(stored) : []);
+        } catch {
+          setHistory([]);
+        }
       });
       
       return () => unsubscribe();
     }
-  }, [activeTab]);
+  }, [activeTab, profile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,16 +66,47 @@ export default function LibroReclamaciones() {
     try {
       const randomNum = Math.floor(100000 + Math.random() * 900000);
       const generatedHoja = `HR-${randomNum}`;
+      const uidValue = profile?.uid || 'guest';
       
-      await addDoc(collection(db, 'complaints'), {
-        userId: auth.currentUser?.uid || null,
+      const complaintData = {
+        userId: uidValue,
         hojaNumber: generatedHoja,
         date: new Date().toISOString(),
         consumer,
         item,
         detail,
-        createdAt: serverTimestamp()
-      });
+        createdAt: new Date().toISOString()
+      };
+
+      if (profile?.isLocal) {
+        const stored = localStorage.getItem(`civa_complaints_${uidValue}`);
+        const list = stored ? JSON.parse(stored) : [];
+        list.unshift({ id: 'local_' + Math.random().toString(36).substring(2, 11), ...complaintData });
+        localStorage.setItem(`civa_complaints_${uidValue}`, JSON.stringify(list));
+        setHistory(list);
+      } else {
+        try {
+          const docRef = await addDoc(collection(db, 'complaints'), {
+            ...complaintData,
+            createdAt: serverTimestamp()
+          });
+
+          // Also save in local storage as a backup
+          try {
+            const stored = localStorage.getItem(`civa_complaints_${uidValue}`);
+            const list = stored ? JSON.parse(stored) : [];
+            list.unshift({ id: docRef.id, ...complaintData });
+            localStorage.setItem(`civa_complaints_${uidValue}`, JSON.stringify(list));
+          } catch {}
+        } catch (error) {
+          console.warn("Firestore save complaint failed, using local storage backup:", error);
+          const stored = localStorage.getItem(`civa_complaints_${uidValue}`);
+          const list = stored ? JSON.parse(stored) : [];
+          list.unshift({ id: 'local_fb_' + Math.random().toString(36).substring(2, 11), ...complaintData });
+          localStorage.setItem(`civa_complaints_${uidValue}`, JSON.stringify(list));
+          setHistory(list);
+        }
+      }
 
       setHojaNumber(generatedHoja);
       setSubmitted(true);

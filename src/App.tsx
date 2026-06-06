@@ -26,6 +26,14 @@ import { useTheme } from './context/ThemeContext';
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [localProfile, setLocalProfile] = useState<UserProfile | null>(() => {
+    try {
+      const stored = localStorage.getItem('civa_local_profile');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [currentTab, setCurrentTab] = useState('copilot');
   const [extraction, setExtraction] = useState<ExtractionResult>({});
@@ -44,18 +52,26 @@ export default function App() {
       setUser(firebaseUser);
       if (firebaseUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
           if (userDoc.exists()) {
-            setProfile(userDoc.data() as UserProfile);
+            const data = userDoc.data() as UserProfile;
+            if (!data.role) {
+              data.role = (data.email === 'admin@civa.pe' || data.email?.startsWith('admin@')) ? 'admin' : 'client';
+              await setDoc(userDocRef, { role: data.role }, { merge: true });
+            }
+            setProfile(data);
           } else {
             // Create profile if it doesn't exist (e.g. first login)
-            const newProfile: any = {
+            const newRole = (firebaseUser.email === 'admin@civa.pe' || firebaseUser.email?.startsWith('admin@')) ? 'admin' : 'client';
+            const newProfile: UserProfile = {
               uid: firebaseUser.uid,
               fullName: firebaseUser.displayName || 'Usuario CIVA',
               email: firebaseUser.email || '',
               createdAt: new Date().toISOString(),
+              role: newRole,
             };
-            await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+            await setDoc(userDocRef, newProfile);
             setProfile(newProfile);
           }
         } catch (error) {
@@ -89,20 +105,26 @@ export default function App() {
            <div className="w-2 h-2 bg-civa-pink rounded-full animate-bounce [animation-delay:-0.3s]" />
            <div className="w-2 h-2 bg-white rounded-full animate-bounce [animation-delay:-0.15s]" />
            <div className="w-2 h-2 bg-civa-pink rounded-full animate-bounce" />
-        </div>
+         </div>
       </div>
     );
   }
 
-  if (!user) {
-    return <Login />;
+  const activeProfile = profile || localProfile;
+  const isAuthenticated = !!user || !!localProfile;
+
+  if (!isAuthenticated) {
+    return <Login onLocalLogin={(prof: UserProfile) => {
+      setLocalProfile(prof);
+      localStorage.setItem('civa_local_profile', JSON.stringify(prof));
+    }} />;
   }
 
   return (
-    <Layout currentTab={currentTab} setCurrentTab={setCurrentTab} profile={profile}>
+    <Layout currentTab={currentTab} setCurrentTab={setCurrentTab} profile={activeProfile}>
       {currentTab === 'copilot' && (
         <Copilot 
-          profile={profile} 
+          profile={activeProfile} 
           setExtraction={setExtraction} 
           extraction={extraction} 
           lastReactedDest={lastReactedDest}
@@ -112,18 +134,18 @@ export default function App() {
       )}
       {currentTab === 'destinations' && <Destinations onSelect={handleDestinationSelect} />}
       {currentTab === 'terminals' && <TerminalMap />}
-      {currentTab === 'reservations' && <Reservations profile={profile} onViewQR={(res) => setSelectedReservation(res)} />}
+      {currentTab === 'reservations' && <Reservations profile={activeProfile} onViewQR={(res) => setSelectedReservation(res)} />}
       {currentTab === 'metrics' && <ThesisMetrics />}
       {currentTab === 'payments' && (
         <Payments 
           extraction={extraction} 
-          profile={profile} 
+          profile={activeProfile} 
           onPay={() => setCurrentTab('reservations')} 
           onGotoProfile={() => setCurrentTab('profile')}
         />
       )}
-      {currentTab === 'profile' && <Profile profile={profile} />}
-      {currentTab === 'reclamaciones' && <LibroReclamaciones />}
+      {currentTab === 'profile' && <Profile profile={activeProfile} />}
+      {currentTab === 'reclamaciones' && <LibroReclamaciones profile={activeProfile} />}
       
       {selectedReservation && <QRModal reservation={selectedReservation} onClose={() => setSelectedReservation(null)} />}
     </Layout>

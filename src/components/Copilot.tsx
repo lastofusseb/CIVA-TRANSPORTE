@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Dispatch, SetStateAction } from 'react';
 import { UserProfile, ChatMessage, ExtractionResult } from '../types';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { generateWithFallback } from '../services/aiService';
@@ -247,7 +247,7 @@ const ai = null; // Removed in favor of service
 
 export default function Copilot({ profile, setExtraction, extraction, onFinalize, lastReactedDest, setLastReactedDest }: { 
   profile: UserProfile | null, 
-  setExtraction: (res: ExtractionResult) => void, 
+  setExtraction: Dispatch<SetStateAction<ExtractionResult>>, 
   extraction: ExtractionResult, 
   onFinalize: () => void,
   lastReactedDest: string | null,
@@ -257,6 +257,7 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isReserving, setIsReserving] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const BOT_AVATAR = "https://img.icons8.com/bubbles/100/robot-3.png"; 
@@ -294,6 +295,29 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
 
   useEffect(() => {
     if (!profile) return;
+
+    if (profile.isLocal) {
+      try {
+        const stored = localStorage.getItem(`civa_chats_${profile.uid}`);
+        let msgs = stored ? JSON.parse(stored) : [];
+        if (msgs.length === 0 && !extraction.destination && !lastReactedDest) {
+          const welcome = {
+            id: 'welcome_local',
+            role: 'model',
+            content: `¡Hola ${profile?.fullName}! 👋 Bienvenido a CIVA Inteligente.\n\nSoy tu asistente personal de viaje. ¿A dónde te gustaría viajar hoy? 🚌✨`,
+            userId: profile.uid,
+            createdAt: new Date().toISOString()
+          };
+          msgs = [welcome];
+          localStorage.setItem(`civa_chats_${profile.uid}`, JSON.stringify(msgs));
+        }
+        setMessages(msgs);
+      } catch (err) {
+        console.error("Local chat history loading failed:", err);
+      }
+      return;
+    }
+
     const q = query(
       collection(db, 'users', profile.uid, 'chats'),
       orderBy('createdAt', 'asc'),
@@ -313,6 +337,26 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
         };
         addMessage(welcome as any);
       }
+    }, (error) => {
+      console.warn("Firestore chats snapshot listener denied or failed. Switching to local storage backup.");
+      try {
+        const stored = localStorage.getItem(`civa_chats_${profile.uid}`);
+        let msgs = stored ? JSON.parse(stored) : [];
+        if (msgs.length === 0 && !extraction.destination && !lastReactedDest) {
+          const welcome = {
+            id: 'welcome_local_fb',
+            role: 'model',
+            content: `¡Hola ${profile?.fullName}! 👋 Bienvenido a CIVA Inteligente.\n\nSoy tu asistente personal de viaje. ¿A dónde te gustaría viajar hoy? 🚌✨`,
+            userId: profile.uid,
+            createdAt: new Date().toISOString()
+          };
+          msgs = [welcome];
+          localStorage.setItem(`civa_chats_${profile.uid}`, JSON.stringify(msgs));
+        }
+        setMessages(msgs);
+      } catch {
+        setMessages([]);
+      }
     });
 
     return () => unsubscribe();
@@ -324,11 +368,22 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
 
   const handleResetChat = async () => {
     if (!profile) return;
-    try {
-      // Clear local state immediately for instant feedback
-      setMessages([]);
-      setExtraction({});
+    
+    // Clear local state immediately for instant feedback
+    setMessages([]);
+    setExtraction({});
 
+    try {
+      localStorage.removeItem(`civa_chats_${profile.uid}`);
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (profile.isLocal) {
+      return;
+    }
+
+    try {
       const q = query(collection(db, 'users', profile.uid, 'chats'));
       const snapshot = await getDocs(q);
       const batch = writeBatch(db);
@@ -337,20 +392,58 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
       });
       await batch.commit();
     } catch (error) {
-      console.error("Error resetting chat:", error);
+      console.warn("Firestore chat reset failed (possibly local-only user), skipped DB clear:", error);
     }
   };
 
   const addMessage = async (msg: Partial<ChatMessage>) => {
     if (!profile) return;
+    
+    const localNewMessage = {
+      id: 'msg_' + Math.random().toString(36).substring(2, 11),
+      ...msg,
+      userId: profile.uid,
+      createdAt: new Date().toISOString()
+    };
+
+    if (profile.isLocal) {
+      try {
+        const stored = localStorage.getItem(`civa_chats_${profile.uid}`);
+        const list = stored ? JSON.parse(stored) : [];
+        list.push(localNewMessage);
+        localStorage.setItem(`civa_chats_${profile.uid}`, JSON.stringify(list));
+        setMessages(list); // Sync state instantly
+      } catch (e) {
+        console.error(e);
+      }
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'users', profile.uid, 'chats'), {
         ...msg,
         userId: profile.uid,
         createdAt: serverTimestamp()
       });
+      // Save locally as backup too
+      try {
+        const stored = localStorage.getItem(`civa_chats_${profile.uid}`);
+        const list = stored ? JSON.parse(stored) : [];
+        list.push(localNewMessage);
+        localStorage.setItem(`civa_chats_${profile.uid}`, JSON.stringify(list));
+      } catch {}
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${profile.uid}/chats`);
+      console.warn("Firestore chat add message failed, falling back to local storage:", error);
+      try {
+        const stored = localStorage.getItem(`civa_chats_${profile.uid}`);
+        const list = stored ? JSON.parse(stored) : [];
+        list.push(localNewMessage);
+        localStorage.setItem(`civa_chats_${profile.uid}`, JSON.stringify(list));
+        setMessages(list); // Sync state instantly
+      } catch {
+        // Fallback set state directly
+        setMessages(prev => [...prev, { ...localNewMessage, createdAt: new Date() } as any]);
+      }
     }
   };
 
@@ -366,33 +459,82 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
         responseMimeType: "application/json"
       });
       
-      const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').replace(/```/g, '').trim();
+      const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const result = JSON.parse(cleanJson) as ExtractionResult;
       
-      // Merge logic for passenger names
-      let mergedNames = extraction.passengerNames || [];
-      if (result.passengerNames && Array.isArray(result.passengerNames)) {
-        const newNames = result.passengerNames.filter(name => !mergedNames.includes(name));
-        mergedNames = [...mergedNames, ...newNames];
-      }
+      setExtraction((prev) => {
+        // Merge logic for passenger names: fill empty slots first, otherwise push
+        let mergedNames = [...(prev.passengerNames || [])];
+        if (result.passengerNames && Array.isArray(result.passengerNames)) {
+          result.passengerNames.forEach(name => {
+            if (name && name.trim()) {
+              const exists = mergedNames.some(mName => mName.trim().toLowerCase() === name.trim().toLowerCase());
+              if (!exists) {
+                const emptyIdx = mergedNames.findIndex(n => !n || !n.trim());
+                if (emptyIdx !== -1) {
+                  mergedNames[emptyIdx] = name.trim();
+                } else {
+                  mergedNames.push(name.trim());
+                }
+              }
+            }
+          });
+        }
 
-      // Merge logic for DNIs
-      let mergedDnis = extraction.passengerDnis || [];
-      if (result.passengerDnis && Array.isArray(result.passengerDnis)) {
-        const newDnis = result.passengerDnis.filter(dni => !mergedDnis.includes(dni));
-        mergedDnis = [...mergedDnis, ...newDnis];
-      }
+        // Merge logic for DNIs: fill empty slots first, otherwise push
+        let mergedDnis = [...(prev.passengerDnis || [])];
+        if (result.passengerDnis && Array.isArray(result.passengerDnis)) {
+          result.passengerDnis.forEach(dni => {
+            if (dni && dni.trim()) {
+              const exists = mergedDnis.some(mDni => mDni.trim() === dni.trim());
+              if (!exists) {
+                const emptyIdx = mergedDnis.findIndex(d => !d || !d.trim());
+                if (emptyIdx !== -1) {
+                  mergedDnis[emptyIdx] = dni.trim();
+                } else {
+                  mergedDnis.push(dni.trim());
+                }
+              }
+            }
+          });
+        }
 
-      // If passengers count is mentioned but lower than existing data, prefer the higher number
-      const currentPassengers = result.passengers || extraction.passengers || 1;
-      const finalPassengers = Math.max(currentPassengers, mergedNames.length, mergedDnis.length);
+        // Avoid overwriting passengers count (re-sizing down) unless explicitly stated in userText
+        let finalPassengers = prev.passengers || 1;
+        if (result.passengers !== undefined && result.passengers !== null) {
+          const lowerText = userText.toLowerCase();
+          const hasPassengerKeyword = /\b(un|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|[1-9]|pasajero|persona|gente|boleto|asiento|ticket|asientos|boletos|pasajeros|personas)\b/.test(lowerText);
+          if (hasPassengerKeyword || result.passengers > 1) {
+            finalPassengers = result.passengers;
+          }
+        }
+        finalPassengers = Math.max(finalPassengers, mergedNames.length, mergedDnis.length);
 
-      setExtraction({
-        ...extraction,
-        ...Object.fromEntries(Object.entries(result).filter(([k, v]) => v != null && k !== 'passengerNames' && k !== 'passengerDnis' && k !== 'passengers')),
-        passengerNames: mergedNames,
-        passengerDnis: mergedDnis,
-        passengers: finalPassengers
+        // Ensure passenger names and dnis arrays are sized exactly to finalPassengers
+        const passengerNames = [...mergedNames];
+        const passengerDnis = [...mergedDnis];
+        while (passengerNames.length < finalPassengers) {
+          passengerNames.push('');
+        }
+        while (passengerDnis.length < finalPassengers) {
+          passengerDnis.push('');
+        }
+
+        // Filter other fields so we don't overwrite valid attributes with empty/unspecified placeholders
+        const validResultEntries = Object.entries(result).filter(([k, v]) => {
+          if (v == null) return false;
+          if (k === 'passengerNames' || k === 'passengerDnis' || k === 'passengers') return false;
+          if (typeof v === 'string' && (v.trim() === '' || v.toLowerCase() === 'unspecified' || v.toLowerCase() === 'default' || v.toLowerCase() === 'unknown')) return false;
+          return true;
+        });
+
+        return {
+          ...prev,
+          ...Object.fromEntries(validResultEntries),
+          passengerNames,
+          passengerDnis,
+          passengers: finalPassengers
+        };
       });
     } catch (error: any) {
       console.error("Extraction error:", error);
@@ -407,6 +549,16 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
     setIsTyping(true);
 
     try {
+      const normalizedMsg = userMsg.toLowerCase().trim().replace(/[.,!¡?¿]/g, '');
+      const approvalKeywords = ['si', 'sí', 'sii', 'siii', 's', 'confirmar', 'confirmo', 'pagar', 'quiero pagar', 'ir a pagar', 'proceder', 'ok', 'vamos', 'listo', 'aceptar', 'acepto', 'pago', 'pagos', 'coincide', 'correcto'];
+      const isApproval = approvalKeywords.includes(normalizedMsg);
+
+      if (isApproval && extraction.destination) {
+        await addMessage({ role: 'user', content: userMsg });
+        await handleCreateReservation();
+        return;
+      }
+
       await addMessage({ role: 'user', content: userMsg });
       
       // Async extraction
@@ -452,7 +604,8 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
   };
 
   const handleCreateReservation = async () => {
-    if (!profile) return;
+    if (!profile || isReserving) return;
+    setIsReserving(true);
     try {
       const origin = extraction.origin || 'Lima';
       const destination = extraction.destination || 'Arequipa';
@@ -460,27 +613,137 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
       const service = extraction.service || 'Excluciva';
       const price = extraction.priceEst || 80;
 
-      await addDoc(collection(db, 'reservations'), {
-        userId: profile.uid,
-        origin: origin,
-        destinationId: destination.toLowerCase(),
-        destinationName: destination,
-        departureDate: date,
-        serviceType: service,
-        price: price,
-        status: 'confirmed',
-        createdAt: serverTimestamp()
-      });
+      let reservationId = '';
+
+      if (profile.isLocal) {
+        reservationId = 'local_' + Math.random().toString(36).substring(2, 11);
+        const localRes = {
+          id: reservationId,
+          userId: profile.uid,
+          origin,
+          destinationId: destination.toLowerCase(),
+          destinationName: destination,
+          departureDate: date,
+          serviceType: service,
+          price,
+          passengers: extraction.passengers || 1,
+          passengerNames: extraction.passengerNames || [],
+          passengerDnis: extraction.passengerDnis || [],
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        };
+        try {
+          const stored = localStorage.getItem(`civa_reservations_${profile.uid}`);
+          let list = [];
+          try {
+            list = stored ? JSON.parse(stored) : [];
+          } catch {
+            list = [];
+          }
+          list.unshift(localRes);
+          localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(list));
+        } catch (e) {
+          console.error("Local storage reservation write failed:", e);
+        }
+      } else {
+        try {
+          const docRef = await addDoc(collection(db, 'reservations'), {
+            userId: profile.uid,
+            origin: origin,
+            destinationId: destination.toLowerCase(),
+            destinationName: destination,
+            departureDate: date,
+            serviceType: service,
+            price: price,
+            passengers: extraction.passengers || 1,
+            passengerNames: extraction.passengerNames || [],
+            passengerDnis: extraction.passengerDnis || [],
+            status: 'pending',
+            createdAt: serverTimestamp()
+          });
+          reservationId = docRef.id;
+
+          // Backup to local storage
+          const localRes = {
+            id: reservationId,
+            userId: profile.uid,
+            origin,
+            destinationId: destination.toLowerCase(),
+            destinationName: destination,
+            departureDate: date,
+            serviceType: service,
+            price,
+            passengers: extraction.passengers || 1,
+            passengerNames: extraction.passengerNames || [],
+            passengerDnis: extraction.passengerDnis || [],
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          };
+          const stored = localStorage.getItem(`civa_reservations_${profile.uid}`);
+          let list = [];
+          try {
+            list = stored ? JSON.parse(stored) : [];
+          } catch {
+            list = [];
+          }
+          list.unshift(localRes);
+          localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(list));
+        } catch (error) {
+          console.warn("Firestore write failed, falling back to local storage reservation creation:", error);
+          reservationId = 'local_fallback_' + Math.random().toString(36).substring(2, 11);
+          const localRes = {
+            id: reservationId,
+            userId: profile.uid,
+            origin,
+            destinationId: destination.toLowerCase(),
+            destinationName: destination,
+            departureDate: date,
+            serviceType: service,
+            price,
+            passengers: extraction.passengers || 1,
+            passengerNames: extraction.passengerNames || [],
+            passengerDnis: extraction.passengerDnis || [],
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          };
+          const stored = localStorage.getItem(`civa_reservations_${profile.uid}`);
+          let list = [];
+          try {
+            list = stored ? JSON.parse(stored) : [];
+          } catch {
+            list = [];
+          }
+          list.unshift(localRes);
+          localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(list));
+        }
+      }
+
+      if (!reservationId) {
+        reservationId = 'local_fallback_' + Math.random().toString(36).substring(2, 11);
+      }
+
+      // Also store the reservationId in extraction Result
+      setExtraction((prev) => ({
+        ...prev,
+        reservationId: reservationId
+      }));
 
       // Also create a notification message in the chat
-      await addMessage({
-        role: 'model',
-        content: `¡Excelente! He procesado tu reserva. \n\n📍 Ruta: ${origin} a ${destination}\n📅 Fecha: ${date}\n🚌 Servicio: ${service}\n💰 Precio: S/ ${price}\n\nPuedes encontrar tu código QR en la pestaña de 'Mis Reservas'. ¡Buen viaje!`,
-      });
+      try {
+        await addMessage({
+          role: 'model',
+          content: `¡Excelente! He registrado tu pre-reserva hacia ${destination}.\n\n📍 Ruta: ${origin} a ${destination}\n📅 Fecha: ${date}\n🚌 Servicio: ${service}\n💰 Inversión Estimada: S/ ${price}\n\nEspere un momento mientras le redirecciono a nuestra Pasarela de Pagos Segura para que pueda efectuar la transacción con total tranquilidad...`,
+        });
+      } catch (msgErr) {
+        console.error("Could not write reservation chat notification:", msgErr);
+      }
 
       onFinalize();
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'reservations');
+      console.error("Outer reservation creation failed, forcing payments tab redirect:", error);
+      onFinalize();
+    } finally {
+      setIsReserving(false);
     }
   };
 
@@ -626,7 +889,7 @@ export default function Copilot({ profile, setExtraction, extraction, onFinalize
         </div>
       </div>
 
-      <IntelligentPanel data={extraction} onFinalize={handleCreateReservation} />
+      <IntelligentPanel data={extraction} onFinalize={handleCreateReservation} isConfirming={isReserving} onChange={setExtraction} />
     </div>
   );
 }

@@ -14,6 +14,17 @@ export default function Reservations({ profile, onViewQR }: { profile: UserProfi
   useEffect(() => {
     if (!profile) return;
 
+    if (profile.isLocal) {
+      try {
+        const stored = localStorage.getItem(`civa_reservations_${profile.uid}`);
+        setReservations(stored ? JSON.parse(stored) : []);
+      } catch (err) {
+        console.error("Local reservation fetch error:", err);
+      }
+      setLoading(false);
+      return;
+    }
+
     const q = query(
       collection(db, 'reservations'),
       where('userId', '==', profile.uid),
@@ -21,10 +32,17 @@ export default function Reservations({ profile, onViewQR }: { profile: UserProfi
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setReservations(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reservation)));
+      const docsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Reservation));
+      setReservations(docsList);
       setLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'reservations');
+      console.warn("Firestore reservations listen failed, falling back to local storage:", error);
+      try {
+        const stored = localStorage.getItem(`civa_reservations_${profile.uid}`);
+        setReservations(stored ? JSON.parse(stored) : []);
+      } catch {
+        setReservations([]);
+      }
       setLoading(false);
     });
 
@@ -33,15 +51,47 @@ export default function Reservations({ profile, onViewQR }: { profile: UserProfi
 
   const handleDelete = async (id: string) => {
     if (!id) return;
+    if (!profile) return;
     if (!window.confirm('¿Deseas eliminar este registro de viaje definitivamente?')) return;
+
+    if (profile.isLocal) {
+      try {
+        const stored = localStorage.getItem(`civa_reservations_${profile.uid}`);
+        const list = stored ? JSON.parse(stored) : [];
+        const filtered = list.filter((r: any) => r.id !== id);
+        localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(filtered));
+        setReservations(filtered);
+      } catch (err) {
+        console.error(err);
+      }
+      return;
+    }
+
     try {
       console.log('Deleting reservation:', id);
       const resRef = doc(db, 'reservations', id);
       await deleteDoc(resRef);
       console.log('Deleted reservation successfully');
+
+      // Sync backup
+      try {
+        const stored = localStorage.getItem(`civa_reservations_${profile.uid}`);
+        if (stored) {
+          const list = JSON.parse(stored);
+          localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(list.filter((r: any) => r.id !== id)));
+        }
+      } catch {}
     } catch (error) {
-      console.error('Delete error details:', error);
-      handleFirestoreError(error, OperationType.DELETE, `reservations/${id}`);
+      console.warn('Delete reservation from Firestore failed, deleting locally:', error);
+      try {
+        const stored = localStorage.getItem(`civa_reservations_${profile.uid}`);
+        const list = stored ? JSON.parse(stored) : [];
+        const filtered = list.filter((r: any) => r.id !== id);
+        localStorage.setItem(`civa_reservations_${profile.uid}`, JSON.stringify(filtered));
+        setReservations(filtered);
+      } catch {
+        setReservations(prev => prev.filter(r => r.id !== id));
+      }
     }
   };
 
@@ -150,9 +200,10 @@ export default function Reservations({ profile, onViewQR }: { profile: UserProfi
                          whileHover={{ scale: 1.1, y: -5 }}
                          whileTap={{ scale: 0.9 }}
                          onClick={() => handleDelete(res.id!)}
-                         className={`p-6 rounded-3xl transition-all border shadow-inner group-hover:opacity-100 ${
-                           theme === 'dark' ? 'bg-white/5 text-white/10 border-white/5 hover:bg-rose-500/80 hover:text-white hover:border-white/20' : 'bg-white/5 text-white/20 border-white/5 hover:bg-rose-500 hover:text-white hover:border-transparent'
+                         className={`p-6 rounded-3xl transition-all border shadow-inner ${
+                           theme === 'dark' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500 hover:text-white hover:border-transparent shadow-[0_0_15px_rgba(239,68,68,0.15)] hover:shadow-[0_0_25px_rgba(239,68,68,0.4)]' : 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-500 hover:text-white hover:border-transparent'
                          }`}
+                         title="Eliminar Registro de Reserva"
                        >
                          <Trash2 className="w-7 h-7" />
                        </motion.button>

@@ -4,6 +4,8 @@ export interface UserProfile {
   email: string;
   photoURL?: string;
   createdAt: string;
+  role?: 'client' | 'admin';
+  isLocal?: boolean;
 }
 
 export interface Destination {
@@ -43,4 +45,5 @@ export interface ExtractionResult {
   passengers?: number;
   passengerNames?: string[];
   passengerDnis?: string[];
+  reservationId?: string;
 }

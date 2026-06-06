@@ -1,15 +1,17 @@
 import { ExtractionResult } from '../types';
-import { Sparkles, MapPin, Bus, Tag, Calendar, QrCode, ArrowRight, Loader2, Users } from 'lucide-react';
+import { Sparkles, MapPin, Bus, Tag, Calendar, QrCode, ArrowRight, Loader2, Users, Shield, UserIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTheme } from '../context/ThemeContext';
+import { DESTINATIONS } from '../constants';
 
 interface IntelligentPanelProps {
   data: ExtractionResult;
   onFinalize: () => void;
   isConfirming?: boolean;
+  onChange?: (updated: ExtractionResult | ((prev: ExtractionResult) => ExtractionResult)) => void;
 }
 
-export default function IntelligentPanel({ data, onFinalize, isConfirming }: IntelligentPanelProps) {
+export default function IntelligentPanel({ data, onFinalize, isConfirming, onChange }: IntelligentPanelProps) {
   const { theme } = useTheme();
   return (
     <div className={`w-full xl:w-[440px] border-t xl:border-l flex flex-col h-auto xl:h-full shrink-0 overflow-y-auto relative font-sans transition-colors duration-700 ${theme === 'dark' ? 'border-white/5 bg-[#0f0716]' : 'border-white/10 bg-[#1a0b2e]'}`}>
@@ -60,31 +62,53 @@ export default function IntelligentPanel({ data, onFinalize, isConfirming }: Int
                     </tr>
                   </thead>
                   <tbody>
-                    {data.passengerNames.map((name, idx) => (
-                      <tr key={idx} className="group hover:bg-white/5 transition-colors">
-                        <td className="px-6 py-4 text-xs font-mono text-white/20 border-b border-white/5">{idx + 1}</td>
-                        <td className="px-6 py-4 text-sm font-medium text-white/80 border-b border-white/5 capitalize">{name}</td>
-                        <td className="px-6 py-4 text-xs font-mono text-white/40 border-b border-white/5">
-                          {data.passengerDnis?.[idx] || "---"}
-                        </td>
-                        <td className="px-6 py-4 border-b border-white/5">
-                          <span className="inline-block w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)] animate-pulse" />
-                        </td>
-                      </tr>
-                    ))}
-                    {/* Fill remaining slots if passengers count > names extracted */}
-                    {data.passengers && data.passengers > data.passengerNames.length && 
-                      Array.from({ length: data.passengers - data.passengerNames.length }).map((_, idx) => (
-                        <tr key={`empty-${idx}`} className="group opacity-50 italic">
-                          <td className="px-6 py-4 text-xs font-mono text-white/20 border-b border-white/5">{data.passengerNames!.length + idx + 1}</td>
-                          <td className="px-6 py-4 text-xs font-medium text-white/30 border-b border-white/5">Pendiente de identificación...</td>
-                          <td className="px-6 py-4 text-xs font-mono text-white/20 border-b border-white/5">---</td>
+                    {Array.from({ length: data.passengers || 1 }).map((_, idx) => {
+                      const name = data.passengerNames?.[idx] || '';
+                      const dni = data.passengerDnis?.[idx] || '';
+                      return (
+                        <tr key={idx} className="group hover:bg-white/5 transition-colors">
+                          <td className="px-6 py-4 text-xs font-mono text-white/20 border-b border-white/5">{idx + 1}</td>
+                          <td className="px-6 py-3 border-b border-white/5">
+                            <input
+                              type="text"
+                              value={name}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                onChange?.((prev) => {
+                                  const newNames = [...(prev.passengerNames || [])];
+                                  while (newNames.length <= idx) newNames.push('');
+                                  newNames[idx] = val;
+                                  return { ...prev, passengerNames: newNames };
+                                });
+                              }}
+                              placeholder="Nombre del Pasajero"
+                              className="bg-transparent border-none outline-none text-white placeholder:text-white/20 w-full text-sm font-medium capitalize focus:ring-0"
+                            />
+                          </td>
+                          <td className="px-6 py-3 border-b border-white/5 font-mono">
+                            <input
+                              type="text"
+                              value={dni}
+                              maxLength={12}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                onChange?.((prev) => {
+                                  const newDnis = [...(prev.passengerDnis || [])];
+                                  while (newDnis.length <= idx) newDnis.push('');
+                                  newDnis[idx] = val;
+                                  return { ...prev, passengerDnis: newDnis };
+                                });
+                              }}
+                              placeholder="DNI/Pasaporte"
+                              className="bg-transparent border-none outline-none text-white/80 placeholder:text-white/10 w-full text-xs font-mono focus:ring-0"
+                            />
+                          </td>
                           <td className="px-6 py-4 border-b border-white/5">
-                            <span className="inline-block w-2 h-2 rounded-full bg-orange-500/50" />
+                            <span className={`inline-block w-2 h-2 rounded-full ${name.trim() ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-orange-500/50'} animate-pulse`} />
                           </td>
                         </tr>
-                      ))
-                    }
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -121,9 +145,139 @@ export default function IntelligentPanel({ data, onFinalize, isConfirming }: Int
             </div>
             
             <div className="space-y-6">
-              <InputGroup label="Punto de Origen" value={data.origin || 'Lima'} disabled theme={theme} />
-              <InputGroup label="Terminal de Arribo" value={data.destination || 'Detectando Vector...'} disabled theme={theme} />
-              <InputGroup label="Cronograma Temporal" value={data.departureDate || 'Próximo ciclo'} disabled theme={theme} />
+              {/* Origen */}
+              <div className="flex flex-col gap-2">
+                <label className={`text-[10px] uppercase font-black ml-2 tracking-widest ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>Punto de Origen</label>
+                <select
+                  value={data.origin || 'Lima'}
+                  onChange={(e) => {
+                    const origin = e.target.value;
+                    onChange?.((prev) => ({ ...prev, origin }));
+                  }}
+                  className={`px-8 py-5.5 rounded-[2rem] border text-sm font-semibold tracking-wide bg-transparent outline-none transition-all cursor-pointer ${
+                    theme === 'dark' ? 'bg-[#150a24] border-white/5 text-white focus:border-civa-pink' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-civa-pink'
+                  }`}
+                  style={{ colorScheme: theme === 'dark' ? 'dark' : 'light' }}
+                >
+                  <option value="Lima" className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>Lima (Terminal Norte/Sur)</option>
+                  <option value="Arequipa" className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>Arequipa</option>
+                  <option value="Cusco" className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>Cusco</option>
+                  <option value="Trujillo" className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>Trujillo</option>
+                </select>
+              </div>
+
+              {/* Destino */}
+              <div className="flex flex-col gap-2">
+                <label className={`text-[10px] uppercase font-black ml-2 tracking-widest ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>Terminal de Arribo</label>
+                <select
+                  value={data.destination || ''}
+                  onChange={(e) => {
+                    const destination = e.target.value;
+                    onChange?.((prev) => {
+                      const destItem = DESTINATIONS.find(d => d.name === destination);
+                      const serviceType = prev.service || 'Excluciva';
+                      let priceEst = prev.priceEst || 80;
+                      if (destItem) {
+                        if (serviceType.toLowerCase().includes('econociva')) priceEst = destItem.econociva;
+                        else if (serviceType.toLowerCase().includes('superciva')) priceEst = destItem.superciva;
+                        else priceEst = destItem.excluciva || 80;
+                      }
+                      return { ...prev, destination, priceEst };
+                    });
+                  }}
+                  className={`px-8 py-5.5 rounded-[2rem] border text-sm font-semibold tracking-wide bg-transparent outline-none transition-all cursor-pointer ${
+                    theme === 'dark' ? 'bg-[#150a24] border-white/5 text-white focus:border-civa-pink' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-civa-pink hover:border-civa-pink/40'
+                  }`}
+                  style={{ colorScheme: theme === 'dark' ? 'dark' : 'light' }}
+                >
+                  <option value="" className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>-- Detectando o Seleccione --</option>
+                  {DESTINATIONS.map(d => (
+                    <option key={d.id} value={d.name} className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>
+                      {d.name} (S/ {d.excluciva} Excluciva)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tipo de Servicio */}
+              <div className="flex flex-col gap-2">
+                <label className={`text-[10px] uppercase font-black ml-2 tracking-widest ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>Tipo de Servicio</label>
+                <select
+                  value={data.service || 'Excluciva'}
+                  onChange={(e) => {
+                    const service = e.target.value;
+                    onChange?.((prev) => {
+                      const destItem = DESTINATIONS.find(d => d.name === prev.destination);
+                      let priceEst = prev.priceEst || 80;
+                      if (destItem) {
+                        if (service.toLowerCase().includes('econociva')) priceEst = destItem.econociva;
+                        else if (service.toLowerCase().includes('superciva')) priceEst = destItem.superciva;
+                        else priceEst = destItem.excluciva || 80;
+                      }
+                      return { ...prev, service, priceEst };
+                    });
+                  }}
+                  className={`px-8 py-5.5 rounded-[2rem] border text-sm font-semibold tracking-wide bg-transparent outline-none transition-all cursor-pointer ${
+                    theme === 'dark' ? 'bg-[#150a24] border-white/5 text-white focus:border-civa-pink' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-civa-pink hover:border-civa-pink/40'
+                  }`}
+                  style={{ colorScheme: theme === 'dark' ? 'dark' : 'light' }}
+                >
+                  <option value="Excluciva" className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>Excluciva (Servicio Premium VIP)</option>
+                  <option value="Superciva" className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>Superciva (Cama 160° Confort)</option>
+                  <option value="Econociva" className={theme === 'dark' ? 'bg-[#150a24] text-white' : 'bg-white text-slate-900'}>Econociva (Ecológico/Económico)</option>
+                </select>
+              </div>
+
+              {/* Fecha y Pasajeros */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className={`text-[10px] uppercase font-black ml-2 tracking-widest ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>Fecha Viaje</label>
+                  <input
+                    type="date"
+                    value={data.departureDate || new Date().toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      const departureDate = e.target.value;
+                      onChange?.((prev) => ({ ...prev, departureDate }));
+                    }}
+                    className={`px-6 py-4.5 rounded-[1.5rem] border text-xs font-semibold bg-transparent outline-none transition-all cursor-pointer ${
+                      theme === 'dark' ? 'bg-[#150a24] border-white/5 text-white focus:border-civa-pink' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-civa-pink hover:border-civa-pink/40'
+                    }`}
+                    style={{ colorScheme: theme === 'dark' ? 'dark' : 'light' }}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className={`text-[10px] uppercase font-black ml-2 tracking-widest ${theme === 'dark' ? 'text-white/30' : 'text-slate-400'}`}>Pasajeros</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={data.passengers || 1}
+                    onChange={(e) => {
+                      const passengers = Math.max(1, parseInt(e.target.value) || 1);
+                      onChange?.((prev) => {
+                        const passengerNames = [...(prev.passengerNames || [])];
+                        const passengerDnis = [...(prev.passengerDnis || [])];
+                        while (passengerNames.length < passengers) {
+                          passengerNames.push('');
+                        }
+                        while (passengerDnis.length < passengers) {
+                          passengerDnis.push('');
+                        }
+                        return {
+                          ...prev,
+                          passengers,
+                          passengerNames: passengerNames.slice(0, passengers),
+                          passengerDnis: passengerDnis.slice(0, passengers)
+                        };
+                      });
+                    }}
+                    className={`px-6 py-4.5 rounded-[1.5rem] border text-xs font-semibold bg-transparent outline-none transition-all cursor-pointer ${
+                      theme === 'dark' ? 'bg-[#150a24] border-white/5 text-white focus:border-civa-pink' : 'bg-slate-50 border-slate-200 text-slate-800 focus:border-civa-pink hover:border-civa-pink/40'
+                    }`}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
